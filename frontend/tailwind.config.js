@@ -7,11 +7,13 @@ export default {
   theme: {
     extend: {
       colors: {
+        ivory: '#FAF9F6', // Main background
+        charcoal: '#202124', // Primary text
         surface: {
-          50: '#FBFBFD',   // Apple warm canvas
-          100: '#F5F5F7',  // Apple light grey container
-          200: '#E5E5EA',  // Apple divider/border line
-          300: '#D1D1D6',
+          50: '#FAF9F6',   // Warm ivory background
+          100: '#F4F2ED',  // Soft container fill
+          200: '#E9E7E2',  // Subtle warm gray border
+          300: '#D8D4CC',
         },
         brand: {
           50: '#F0FDFA',
@@ -19,38 +21,38 @@ export default {
           200: '#99F6E4',
           500: '#14B8A6',
           600: '#0D9488',  // Primary RoomSync Teal Accent
-          700: '#0F766E',  // Deep Teal for active states
+          700: '#0F766E',  // Deep Teal for active/hover states
           800: '#115E59',
           900: '#134E4A',
         },
         ink: {
-          primary: '#1D1D1F',    // Primary near-black typography
-          secondary: '#6E6E73',  // Apple secondary text
-          tertiary: '#86868B',   // Muted notes and timestamps
-          border: 'rgba(0, 0, 0, 0.08)',
-        }
+          primary: '#202124',    // Primary charcoal typography
+          secondary: '#72777F',  // Muted slate secondary
+          tertiary: '#9AA0A6',   // Muted tertiary / placeholders
+        },
+        line: '#E9E7E2', // Fine borders
       },
       fontFamily: {
         sans: [
           'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
-          '"SF Pro Display"',
-          '"SF Pro Text"',
           '"Segoe UI"',
           'Roboto',
           'sans-serif',
         ],
       },
       boxShadow: {
-        'subtle': '0 2px 10px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.04)',
-        'apple': '0 8px 30px rgba(0, 0, 0, 0.06)',
-        'card-hover': '0 14px 40px rgba(0, 0, 0, 0.08)',
-        'float': '0 20px 48px rgba(0, 0, 0, 0.1)',
+        'subtle': '0 1px 3px rgba(32, 33, 36, 0.04), 0 1px 2px rgba(32, 33, 36, 0.02)',
+        'soft': '0 4px 20px -2px rgba(32, 33, 36, 0.04), 0 2px 6px -1px rgba(32, 33, 36, 0.02)',
+        'card': '0 2px 8px -1px rgba(32, 33, 36, 0.04), 0 1px 3px rgba(32, 33, 36, 0.02)',
+        'card-hover': '0 12px 32px -4px rgba(32, 33, 36, 0.07), 0 4px 12px -2px rgba(32, 33, 36, 0.03)',
+        'search': '0 8px 30px rgba(32, 33, 36, 0.06)',
       },
       borderRadius: {
-        'apple': '18px',
-        'apple-xl': '24px',
+        'apple': '16px',
+        'apple-xl': '22px',
+        'apple-2xl': '28px',
       }
     },
   },
