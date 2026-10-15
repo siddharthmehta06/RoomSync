@@ -49,13 +49,26 @@ export const HomePage = () => {
   return (
     <div className="flex flex-col">
       
-      {/* Hero Section */}
-      <section className="relative pt-12 pb-20 md:pt-20 md:pb-32 overflow-hidden bg-gradient-to-b from-surface-50 via-white to-surface-50">
+      {/* Hero Section with Custom Living Room Background */}
+      <section className="relative pt-14 pb-24 md:pt-24 md:pb-36 overflow-hidden">
+        
+        {/* Background Image Layer */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <img
+            src="/hero-bg.jpg"
+            alt="From architectural sketch to harmonious shared home"
+            className="w-full h-full object-cover object-bottom opacity-80 sm:opacity-90"
+          />
+          {/* Soft radial and vertical lighting overlay for contrast & readability */}
+          <div className="absolute inset-0 bg-gradient-to-b from-surface-50/95 via-white/75 to-surface-50/95" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/90 via-transparent to-surface-50/60" />
+        </div>
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           
           {/* Eyebrow Pill */}
           <div className="flex justify-center mb-6">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/60 shadow-2xs">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-brand-200/80 shadow-subtle">
               <Sparkles className="w-4 h-4 text-brand-600" />
               <span className="text-xs font-medium text-brand-800">
                 The Explainable 22-Factor Compatibility Engine
