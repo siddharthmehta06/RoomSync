@@ -10,6 +10,7 @@ import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import preferenceRoutes from './routes/preferenceRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
+import savedRoomRoutes from './routes/savedRoomRoutes.js';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/preferences', preferenceRoutes);
 app.use('/api/rooms', roomRoutes);
+app.use('/api/saved-rooms', savedRoomRoutes);
 
 // Fallback error middlewares
 app.use(notFound);
