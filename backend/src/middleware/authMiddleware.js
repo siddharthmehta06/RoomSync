@@ -92,3 +92,34 @@ export function authorize(...roles) {
     next();
   };
 }
+
+/**
+ * Optional authentication middleware - populates req.user if valid token exists,
+ * but allows unauthenticated requests to proceed.
+ */
+export async function optionalAuth(req, res, next) {
+  let token;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET;
+    if (secret) {
+      const decoded = jwt.verify(token, secret);
+      const user = await User.findById(decoded.id).select('-password');
+      if (user) {
+        req.user = user;
+      }
+    }
+  } catch (error) {
+    // Silently proceed for optional auth if token is invalid or expired
+  }
+
+  next();
+}
