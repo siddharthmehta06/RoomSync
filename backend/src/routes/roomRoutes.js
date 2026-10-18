@@ -7,6 +7,7 @@ import {
   updateRoom,
   deleteRoom,
 } from '../controllers/roomController.js';
+import { getCompatibilityPreview } from '../controllers/matchController.js';
 import { protect, authorize, optionalAuth } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 
@@ -149,6 +150,7 @@ router.post(
   createRoomValidation,
   createRoom
 );
+router.post('/:id/compatibility-preview', protect, getCompatibilityPreview);
 router.put('/:id', protect, updateRoomValidation, updateRoom);
 router.delete('/:id', protect, deleteRoom);
 
