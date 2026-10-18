@@ -5,7 +5,6 @@ export const Card = ({
   children,
   className,
   hoverable = false,
-  glass = false,
   onClick,
   ...props
 }) => {
@@ -13,9 +12,8 @@ export const Card = ({
     <div
       onClick={onClick}
       className={cn(
-        "rounded-2xl border border-black/[0.06] transition-all duration-300",
-        glass ? "glass-card" : "bg-white",
-        hoverable ? "hover:shadow-card-hover hover:-translate-y-0.5 cursor-pointer" : "shadow-subtle",
+        "rounded-2xl border border-surface-200 bg-white transition-all duration-200",
+        hoverable ? "hover:shadow-card-hover hover:border-surface-300 cursor-pointer" : "shadow-subtle",
         className
       )}
       {...props}
@@ -26,19 +24,19 @@ export const Card = ({
 };
 
 export const CardHeader = ({ children, className, ...props }) => (
-  <div className={cn("px-6 py-5 border-b border-black/[0.04]", className)} {...props}>
+  <div className={cn("px-5 py-4 border-b border-surface-200", className)} {...props}>
     {children}
   </div>
 );
 
 export const CardContent = ({ children, className, ...props }) => (
-  <div className={cn("p-6", className)} {...props}>
+  <div className={cn("p-5", className)} {...props}>
     {children}
   </div>
 );
 
 export const CardFooter = ({ children, className, ...props }) => (
-  <div className={cn("px-6 py-4 border-t border-black/[0.04] bg-surface-50/50 rounded-b-2xl", className)} {...props}>
+  <div className={cn("px-5 py-3.5 border-t border-surface-200 bg-surface-50/50 rounded-b-2xl", className)} {...props}>
     {children}
   </div>
 );
