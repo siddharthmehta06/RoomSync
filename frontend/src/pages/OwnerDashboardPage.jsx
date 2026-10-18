@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   PlusCircle, 
@@ -11,17 +11,48 @@ import {
   Clock, 
   ChevronRight,
   ShieldCheck,
-  Edit3
+  Edit3,
+  Loader2
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { CompatibilityBadge } from '../components/ui/CompatibilityBadge';
 import { MOCK_ROOMS } from '../data/mockRooms';
+import { fetchMyListings } from '../services/api';
 
 export const OwnerDashboardPage = () => {
+  const [listings, setListings] = useState([]);
+  const [loadingListings, setLoadingListings] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchMyListings()
+      .then((data) => {
+        if (isMounted) {
+          if (Array.isArray(data) && data.length > 0) {
+            setListings(data);
+          } else {
+            // If no database listings yet, show starter mock listings
+            setListings(MOCK_ROOMS.slice(0, 2));
+          }
+          setLoadingListings(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setListings(MOCK_ROOMS.slice(0, 2));
+          setLoadingListings(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const stats = [
-    { label: 'Active Listings', value: '2', icon: Home, trend: '+1 this month' },
+    { label: 'Active Listings', value: String(listings.length || 2), icon: Home, trend: '+1 this month' },
     { label: 'Seeker Enquiries', value: '18', icon: MessageSquare, trend: '4 pending reply' },
     { label: 'Scheduled Visits', value: '5', icon: Calendar, trend: '2 this weekend' },
     { label: 'Avg Compatibility', value: '89%', icon: TrendingUp, trend: 'High match quality' },
@@ -105,48 +136,70 @@ export const OwnerDashboardPage = () => {
       <div className="mb-10">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-ink-primary">Your Listed Rooms</h2>
-          <span className="text-xs text-ink-secondary">2 active listings</span>
+          <span className="text-xs text-ink-secondary">{listings.length} active listing{listings.length === 1 ? '' : 's'}</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {MOCK_ROOMS.slice(0, 2).map((room) => (
-            <Card key={room.id} className="overflow-hidden bg-white p-5 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <Badge variant="emerald" size="sm">Active Listing</Badge>
-                  <span className="text-xs text-ink-tertiary">14 applicants screened</span>
-                </div>
-                <div className="flex gap-4">
-                  <img
-                    src={room.images[0]}
-                    alt={room.title}
-                    className="w-24 h-24 rounded-xl object-cover shrink-0"
-                  />
-                  <div>
-                    <h3 className="font-semibold text-sm text-ink-primary line-clamp-1">{room.title}</h3>
-                    <p className="text-xs text-ink-secondary mt-0.5">{room.locality}, {room.city}</p>
-                    <div className="text-sm font-semibold text-brand-700 mt-2">
-                      ₹{room.rent.toLocaleString('en-IN')}<span className="text-xs font-normal text-ink-tertiary">/mo</span>
+        {loadingListings ? (
+          <div className="py-12 text-center bg-white rounded-2xl border border-surface-200">
+            <Loader2 className="w-6 h-6 text-brand-600 animate-spin mx-auto mb-2" />
+            <p className="text-xs text-ink-secondary">Loading your properties...</p>
+          </div>
+        ) : listings.length === 0 ? (
+          <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-surface-300">
+            <Home className="w-10 h-10 text-ink-tertiary mx-auto mb-3" />
+            <h3 className="font-semibold text-sm text-ink-primary">No properties listed yet</h3>
+            <p className="text-xs text-ink-secondary mt-1">Publish your first room to start screening compatible flatmates.</p>
+            <Link to="/owner/listings/new" className="inline-block mt-4">
+              <Button variant="primary" size="sm" icon={PlusCircle}>
+                Publish a Room
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {listings.map((room) => (
+              <Card key={room.id} className="overflow-hidden bg-white p-5 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <Badge variant="emerald" size="sm">Active Listing</Badge>
+                    <span className="text-xs text-ink-tertiary">Verified Host Space</span>
+                  </div>
+                  <div className="flex gap-4">
+                    <img
+                      src={
+                        room.images && room.images.length > 0
+                          ? room.images[0]
+                          : 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80'
+                      }
+                      alt={room.title}
+                      className="w-24 h-24 rounded-xl object-cover shrink-0 bg-surface-100"
+                    />
+                    <div>
+                      <h3 className="font-semibold text-sm text-ink-primary line-clamp-1">{room.title}</h3>
+                      <p className="text-xs text-ink-secondary mt-0.5">{room.locality}, {room.city}</p>
+                      <div className="text-sm font-semibold text-brand-700 mt-2">
+                        ₹{(room.rent || 0).toLocaleString('en-IN')}<span className="text-xs font-normal text-ink-tertiary">/mo</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-5 pt-3 border-t border-surface-200 flex items-center justify-between">
-                <Link to={`/rooms/${room.id}`}>
-                  <Button variant="ghost" size="sm" icon={Eye}>
-                    Preview
-                  </Button>
-                </Link>
-                <Link to={`/owner/listings/${room.id}/edit`}>
-                  <Button variant="secondary" size="sm" icon={Edit3}>
-                    Edit Rules & Specs
-                  </Button>
-                </Link>
-              </div>
-            </Card>
-          ))}
-        </div>
+                <div className="mt-5 pt-3 border-t border-surface-200 flex items-center justify-between">
+                  <Link to={`/rooms/${room.id}`}>
+                    <Button variant="ghost" size="sm" icon={Eye}>
+                      Preview
+                    </Button>
+                  </Link>
+                  <Link to={`/owner/listings/${room.id}/edit`}>
+                    <Button variant="secondary" size="sm" icon={Edit3}>
+                      Edit Rules & Specs
+                    </Button>
+                  </Link>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent Applicant Enquiries */}

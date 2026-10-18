@@ -1,35 +1,57 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Lock, Mail, ArrowRight, UserCheck, Shield } from 'lucide-react';
+import { Lock, Mail, ArrowRight, UserCheck, Shield, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { loginUser, loginDemoUser } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  const { login, refreshUser } = useAuth();
   const [role, setRole] = useState('seeker');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    // Simulate login and redirect based on role
-    if (role === 'owner') {
-      navigate('/owner/dashboard');
-    } else {
-      navigate('/matches');
+    setError(null);
+    setLoading(true);
+
+    try {
+      const data = await login(email, password);
+      const userRole = data.user?.role || role;
+      if (userRole === 'owner') {
+        navigate('/owner/dashboard');
+      } else {
+        navigate('/matches');
+      }
+    } catch (err) {
+      setError(err.message || 'Login failed. Please verify credentials.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDemoLogin = (selectedRole) => {
+  const handleDemoLogin = async (selectedRole) => {
     setRole(selectedRole);
-    if (selectedRole === 'owner') {
-      setEmail('aditya.owner@example.com');
-      setPassword('demo1234');
-      setTimeout(() => navigate('/owner/dashboard'), 200);
-    } else {
-      setEmail('seeker.priya@example.com');
-      setPassword('demo1234');
-      setTimeout(() => navigate('/matches'), 200);
+    setError(null);
+    setLoading(true);
+
+    try {
+      const data = await loginDemoUser(selectedRole);
+      await refreshUser();
+      if (selectedRole === 'owner') {
+        navigate('/owner/dashboard');
+      } else {
+        navigate('/matches');
+      }
+    } catch (err) {
+      setError(err.message || 'Demo login failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -68,6 +90,13 @@ export const LoginPage = () => {
           </button>
         </div>
 
+        {error && (
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleLogin} className="space-y-4">
           <Input
@@ -98,8 +127,8 @@ export const LoginPage = () => {
             <a href="#forgot" className="text-brand-700 hover:underline">Forgot password?</a>
           </div>
 
-          <Button type="submit" variant="primary" className="w-full justify-center" size="md">
-            Sign In as {role === 'seeker' ? 'Seeker' : 'Owner'}
+          <Button type="submit" variant="primary" className="w-full justify-center" size="md" disabled={loading}>
+            {loading ? 'Signing in...' : `Sign In as ${role === 'seeker' ? 'Seeker' : 'Owner'}`}
           </Button>
         </form>
 

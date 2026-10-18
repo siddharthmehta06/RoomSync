@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Sparkles, 
@@ -14,22 +14,30 @@ import {
   Volume2,
   Users,
   Briefcase,
-  HeartHandshake
+  HeartHandshake,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Card, CardContent } from '../components/ui/Card';
+import { useAuth } from '../context/AuthContext';
+import { savePreferencesApi, fetchPreferences } from '../services/api';
 
 export const OnboardingPage = () => {
   const navigate = useNavigate();
+  const { token, isAuthenticated } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   // Preference State covering the 22 factors
   const [preferences, setPreferences] = useState({
     // Hard constraints
     budgetCeiling: 22000,
-    dietaryRule: 'Any', // 'Pure-Veg', 'Veg-Only Flat', 'Any'
-    smokingPolicy: 'Non-Smoker', // 'Strictly Non-Smoking', 'Balcony Only', 'Flexible'
+    maxDeposit: 50000,
+    dietaryRule: 'Any / Flexible', // 'Pure Veg Kitchen Only', 'Eggetarian Friendly', 'Any / Flexible'
+    smokingPolicy: 'Strictly Non-Smoking', // 'Strictly Non-Smoking', 'Balcony Smoking OK', 'Smoking Allowed'
     alcoholPolicy: 'Moderate',
     petPolicy: 'Pet-Friendly',
 
@@ -39,12 +47,12 @@ export const OnboardingPage = () => {
     cleanliness: 4, // 1 to 5
     noiseTolerance: 3, // 1 to 5
     guestPolicy: 'Occasional', // 'Rare', 'Occasional', 'Frequent'
-    overnightGuests: 'With Notice',
+    overnightGuests: 'With 24h Advance Notice', // 'Strictly No Overnight', 'With 24h Advance Notice', 'Anytime Welcome'
     wfhDays: 2,
     studyHoursNeeded: 2,
-    cookingHabit: 'Cook Sometimes',
+    cookingHabit: 'Occasional',
     foodSharingPreference: 'Separate Groceries',
-    personalSpaceNeed: 'High', // High, Balanced, Social
+    personalSpaceNeed: 'Balanced', // High, Balanced, Social
     houseRulesStrictness: 'Moderate',
 
     // Importance weights (1 to 5)
@@ -58,6 +66,49 @@ export const OnboardingPage = () => {
       wfh: 3,
     }
   });
+
+  // Pre-load saved preferences if available
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSaved() {
+      if (!token) return;
+      try {
+        const data = await fetchPreferences(token);
+        if (isMounted && data) {
+          const hc = data.hardConstraints || {};
+          const fp = data.flexiblePreferences || {};
+          const iw = data.importanceWeights || {};
+
+          setPreferences((prev) => ({
+            ...prev,
+            budgetCeiling: hc.budgetCeiling || prev.budgetCeiling,
+            maxDeposit: hc.maxDeposit || prev.maxDeposit,
+            dietaryRule: hc.dietaryRule === 'Pure-Veg' ? 'Pure Veg Kitchen Only' : (hc.dietaryRule === 'Veg-Only Flat' ? 'Eggetarian Friendly' : 'Any / Flexible'),
+            smokingPolicy: hc.smokingPolicy === 'Strictly Non-Smoking' ? 'Strictly Non-Smoking' : (hc.smokingPolicy === 'Balcony Only' ? 'Balcony Smoking OK' : 'Smoking Allowed'),
+            alcoholPolicy: hc.alcoholPolicy || prev.alcoholPolicy,
+            petPolicy: hc.petPolicy || prev.petPolicy,
+            bedtime: fp.sleepSchedule !== undefined ? (fp.sleepSchedule < 12 ? fp.sleepSchedule + 24 : fp.sleepSchedule) : prev.bedtime,
+            wakeTime: fp.wakeSchedule !== undefined ? fp.wakeSchedule : prev.wakeTime,
+            cleanliness: fp.cleanliness || prev.cleanliness,
+            noiseTolerance: fp.noiseTolerance || prev.noiseTolerance,
+            guestPolicy: fp.guestPolicy || prev.guestPolicy,
+            overnightGuests: fp.overnightGuests === 'Not Allowed' ? 'Strictly No Overnight' : (fp.overnightGuests === 'Frequent' ? 'Anytime Welcome' : 'With 24h Advance Notice'),
+            wfhDays: fp.wfhDays !== undefined ? fp.wfhDays : prev.wfhDays,
+            weights: {
+              ...prev.weights,
+              ...iw,
+            },
+          }));
+        }
+      } catch (err) {
+        // Fall back to default
+      }
+    }
+    loadSaved();
+    return () => {
+      isMounted = false;
+    };
+  }, [token]);
 
   const handleWeightChange = (key, val) => {
     setPreferences(prev => ({
@@ -73,9 +124,72 @@ export const OnboardingPage = () => {
     { id: 4, title: 'Custom Weights', desc: 'How much each factor matters to you' },
   ];
 
-  const handleFinish = () => {
-    // Save to local storage or state
+  const handleFinish = async () => {
+    setSaving(true);
+    setErrorMessage(null);
+
+    // Map UI values to backend schema
+    const mappedDiet = preferences.dietaryRule === 'Pure Veg Kitchen Only' 
+      ? 'Pure-Veg' 
+      : (preferences.dietaryRule === 'Eggetarian Friendly' ? 'Veg-Only Flat' : 'Any');
+
+    const mappedSmoking = preferences.smokingPolicy === 'Strictly Non-Smoking'
+      ? 'Strictly Non-Smoking'
+      : (preferences.smokingPolicy === 'Balcony Smoking OK' ? 'Balcony Only' : 'Flexible');
+
+    const mappedOvernight = preferences.overnightGuests === 'Strictly No Overnight'
+      ? 'Not Allowed'
+      : (preferences.overnightGuests === 'Anytime Welcome' ? 'Frequent' : 'With Notice');
+
+    const decimalSleep = preferences.bedtime >= 24 ? preferences.bedtime - 24 : preferences.bedtime;
+
+    const payload = {
+      hardConstraints: {
+        budgetCeiling: Number(preferences.budgetCeiling) || 25000,
+        maxDeposit: Number(preferences.maxDeposit) || 50000,
+        dietaryRule: mappedDiet,
+        smokingPolicy: mappedSmoking,
+        alcoholPolicy: preferences.alcoholPolicy || 'Moderate',
+        petPolicy: preferences.petPolicy || 'Pet-Friendly',
+      },
+      flexiblePreferences: {
+        sleepSchedule: Number(decimalSleep),
+        wakeSchedule: Number(preferences.wakeTime) || 7,
+        cleanliness: Number(preferences.cleanliness) || 4,
+        noiseTolerance: Number(preferences.noiseTolerance) || 3,
+        guestPolicy: preferences.guestPolicy || 'Occasional',
+        overnightGuests: mappedOvernight,
+        socialPreference: preferences.personalSpaceNeed === 'Social' ? 'Social Hub' : (preferences.personalSpaceNeed === 'High' ? 'Quiet Retreat' : 'Balanced'),
+        wfhDays: Number(preferences.wfhDays) || 2,
+        cookingHabit: 'Occasional',
+        foodSharing: preferences.foodSharingPreference || 'Separate Groceries',
+        personalSpace: preferences.personalSpaceNeed === 'Social' ? 'Communal' : (preferences.personalSpaceNeed === 'High' ? 'High' : 'Balanced'),
+        rulesStrictness: preferences.houseRulesStrictness || 'Moderate',
+      },
+      importanceWeights: {
+        budget: Number(preferences.weights.budget) || 5,
+        diet: Number(preferences.weights.diet) || 4,
+        sleepSync: Number(preferences.weights.sleepSync) || 5,
+        cleanliness: Number(preferences.weights.cleanliness) || 4,
+        noise: Number(preferences.weights.noise) || 4,
+        guests: Number(preferences.weights.guests) || 3,
+        wfh: Number(preferences.weights.wfh) || 3,
+      }
+    };
+
+    // Save locally for immediate offline state
     localStorage.setItem('roomsync_preferences', JSON.stringify(preferences));
+
+    // Save to MongoDB if authenticated
+    if (token) {
+      try {
+        await savePreferencesApi(payload, token);
+      } catch (err) {
+        console.warn('Could not save preferences to server:', err.message);
+      }
+    }
+
+    setSaving(false);
     navigate('/matches');
   };
 
@@ -92,6 +206,15 @@ export const OnboardingPage = () => {
           Tell us your non-negotiables and flexible living habits. We use these parameters to generate explainable, transparent matches.
         </p>
       </div>
+
+      {errorMessage && (
+        <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        </div>
+      )}
 
       {/* Step Progress Indicators */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
@@ -228,8 +351,8 @@ export const OnboardingPage = () => {
                 </div>
                 <input
                   type="range"
-                  min="21" // 9 PM
-                  max="28" // 4 AM (represented as 28)
+                  min="21"
+                  max="28"
                   value={preferences.bedtime}
                   onChange={(e) => setPreferences({ ...preferences, bedtime: Number(e.target.value) })}
                   className="w-full accent-brand-600 cursor-pointer"
@@ -422,6 +545,7 @@ export const OnboardingPage = () => {
               variant="secondary"
               size="sm"
               icon={ArrowLeft}
+              disabled={saving}
               onClick={() => setCurrentStep(currentStep - 1)}
             >
               Previous
@@ -444,11 +568,12 @@ export const OnboardingPage = () => {
             <Button
               variant="primary"
               size="md"
-              icon={Sparkles}
+              icon={saving ? Loader2 : Sparkles}
               iconPosition="right"
+              disabled={saving}
               onClick={handleFinish}
             >
-              Calculate Compatibility Matches
+              {saving ? 'Saving to RoomSync...' : 'Calculate Compatibility Matches'}
             </Button>
           )}
         </div>

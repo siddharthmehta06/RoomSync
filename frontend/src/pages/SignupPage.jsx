@@ -1,23 +1,37 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, Lock, Home, Sparkles } from 'lucide-react';
+import { User, Mail, Phone, Lock, Home, Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { useAuth } from '../context/AuthContext';
 
 export const SignupPage = () => {
   const navigate = useNavigate();
+  const { register } = useAuth();
   const [role, setRole] = useState('seeker');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleSignup = (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    if (role === 'seeker') {
-      navigate('/onboarding');
-    } else {
-      navigate('/owner/dashboard');
+    setError(null);
+    setLoading(true);
+
+    try {
+      await register({ fullName, email, phone, password, role });
+      if (role === 'seeker') {
+        navigate('/onboarding');
+      } else {
+        navigate('/owner/dashboard');
+      }
+    } catch (err) {
+      setError(err.message || 'Registration failed. Please check details.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,6 +83,13 @@ export const SignupPage = () => {
           </button>
         </div>
 
+        {error && (
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSignup} className="space-y-4">
           <Input
@@ -91,9 +112,9 @@ export const SignupPage = () => {
           />
 
           <Input
-            label="Mobile Number (WhatsApp Enabled)"
+            label="Mobile Number (10 digits)"
             type="tel"
-            placeholder="+91 98765 43210"
+            placeholder="9876543210"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             icon={Phone}
@@ -103,7 +124,7 @@ export const SignupPage = () => {
           <Input
             label="Create Secure Password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder="At least 6 characters"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             icon={Lock}
@@ -114,8 +135,10 @@ export const SignupPage = () => {
             By registering, you agree to RoomSync’s Non-Discrimination Policy, Community Standards, and Tenancy Verification Protocol.
           </div>
 
-          <Button type="submit" variant="primary" className="w-full justify-center" size="md">
-            {role === 'seeker' ? 'Continue to Lifestyle Onboarding' : 'Complete Registration & List Room'}
+          <Button type="submit" variant="primary" className="w-full justify-center" size="md" disabled={loading}>
+            {loading 
+              ? 'Creating account...' 
+              : (role === 'seeker' ? 'Continue to Lifestyle Onboarding' : 'Complete Registration & List Room')}
           </Button>
         </form>
 
