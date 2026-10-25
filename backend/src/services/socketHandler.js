@@ -199,8 +199,8 @@ export function setupSocketIO(io) {
           createdAt: message.createdAt.toISOString(),
         };
 
-        // Broadcast to all participants in the conversation room
-        io.to(conversationId.toString()).emit('receive_message', messagePayload);
+        // Broadcast to other participants in the conversation room
+        socket.to(conversationId.toString()).emit('receive_message', messagePayload);
 
         // Acknowledge back to sender
         if (typeof callback === 'function') {
@@ -208,6 +208,9 @@ export function setupSocketIO(io) {
             success: true,
             data: messagePayload,
           });
+        } else {
+          // If sender did not supply a callback, deliver to sender socket directly
+          socket.emit('receive_message', messagePayload);
         }
       } catch (err) {
         if (typeof callback === 'function') {

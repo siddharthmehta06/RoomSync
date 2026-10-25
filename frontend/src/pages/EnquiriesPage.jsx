@@ -52,6 +52,13 @@ export const EnquiriesPage = () => {
   const socketRef = useRef(null);
   const activeChatIdRef = useRef(activeChatId);
   const messagesEndRef = useRef(null);
+  const isSendingRef = useRef(false);
+  const currentUserRef = useRef(currentUser);
+
+  // Keep currentUserRef in sync for socket event handlers
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
 
   // Keep activeChatIdRef in sync for socket listener callbacks
   useEffect(() => {
@@ -124,10 +131,31 @@ export const EnquiriesPage = () => {
       // Append to active chat if message belongs to current thread
       if (activeChatIdRef.current === incomingMsg.conversationId) {
         setMessages((prev) => {
-          const exists = prev.some(
-            (m) => (m.id || m._id) === (incomingMsg.id || incomingMsg._id)
+          const incomingId = incomingMsg.id || incomingMsg._id;
+          // 1. Check if message already exists by real ID
+          const alreadyExists = prev.some(
+            (m) => (m.id || m._id) === incomingId
           );
-          if (exists) return prev;
+          if (alreadyExists) return prev;
+
+          // 2. If incoming message is from current user, reconcile with optimistic placeholder
+          const currentUserId = currentUserRef.current?._id || currentUserRef.current?.id;
+          const senderId = incomingMsg.sender?.id || incomingMsg.sender?._id || incomingMsg.sender;
+          const isFromMe = Boolean(
+            currentUserId && senderId && currentUserId.toString() === senderId.toString()
+          );
+
+          if (isFromMe) {
+            const optimisticIndex = prev.findIndex(
+              (m) => m.isOptimistic && m.text === incomingMsg.text
+            );
+            if (optimisticIndex !== -1) {
+              const updated = [...prev];
+              updated[optimisticIndex] = incomingMsg;
+              return updated;
+            }
+          }
+
           return [...prev, incomingMsg];
         });
       }
@@ -263,12 +291,17 @@ export const EnquiriesPage = () => {
 
   // Handle message sending (via Socket.IO with HTTP fallback)
   const handleSendMessage = async (e) => {
-    e.preventDefault();
-    const trimmed = messageText.trim();
-    if (!trimmed || !activeChatId || sending) return;
+    if (e?.preventDefault) e.preventDefault();
+    if (isSendingRef.current) return;
 
+    const trimmed = messageText.trim();
+    if (!trimmed || !activeChatId) return;
+
+    isSendingRef.current = true;
     setSending(true);
-    const tempId = `temp-${Date.now()}`;
+    setMessageText('');
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMessage = {
       id: tempId,
       _id: tempId,
@@ -285,7 +318,6 @@ export const EnquiriesPage = () => {
     };
 
     setMessages((prev) => [...prev, optimisticMessage]);
-    setMessageText('');
 
     try {
       if (socketRef.current?.connected) {
@@ -294,23 +326,40 @@ export const EnquiriesPage = () => {
           { conversationId: activeChatId, text: trimmed },
           (response) => {
             if (response?.success && response.data) {
-              setMessages((prev) =>
-                prev.map((m) => (m.id === tempId ? response.data : m))
-              );
+              const realMsg = response.data;
+              const realId = realMsg.id || realMsg._id;
+              setMessages((prev) => {
+                // If real message already exists (e.g. from receive_message), remove temp placeholder
+                const alreadyExists = prev.some(
+                  (m) => (m.id || m._id) === realId && m.id !== tempId
+                );
+                if (alreadyExists) {
+                  return prev.filter((m) => m.id !== tempId);
+                }
+                return prev.map((m) => (m.id === tempId ? realMsg : m));
+              });
             }
           }
         );
       } else {
         const sent = await sendConversationMessage(activeChatId, trimmed, token);
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? sent : m))
-        );
+        const realId = sent.id || sent._id;
+        setMessages((prev) => {
+          const alreadyExists = prev.some(
+            (m) => (m.id || m._id) === realId && m.id !== tempId
+          );
+          if (alreadyExists) {
+            return prev.filter((m) => m.id !== tempId);
+          }
+          return prev.map((m) => (m.id === tempId ? sent : m));
+        });
       }
     } catch (err) {
       console.error('[Enquiries] Failed to send message:', err);
       setErrorBanner('Failed to send message. Please retry.');
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     } finally {
+      isSendingRef.current = false;
       setSending(false);
     }
   };
@@ -351,6 +400,22 @@ export const EnquiriesPage = () => {
     const senderId = m.sender?._id || m.sender?.id || m.sender;
     return Boolean(currentId && senderId && currentId.toString() === senderId.toString());
   };
+
+  // Deduplicate messages by unique identifier to guarantee no duplicate bubbles are rendered
+  const displayedMessages = React.useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const m of messages) {
+      const key = m.id || m._id;
+      if (!key) {
+        result.push(m);
+      } else if (!seen.has(key)) {
+        seen.add(key);
+        result.push(m);
+      }
+    }
+    return result;
+  }, [messages]);
 
   // If user is not authenticated, show sign-in prompt
   if (!authLoading && !isAuthenticated) {
@@ -624,7 +689,7 @@ export const EnquiriesPage = () => {
                     <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <span>Loading message history...</span>
                   </div>
-                ) : messages.length === 0 ? (
+                ) : displayedMessages.length === 0 ? (
                   <div className="py-12 text-center text-xs text-ink-secondary">
                     <p className="font-medium text-ink-primary">No messages yet in this enquiry</p>
                     <p className="text-[11px] text-ink-tertiary mt-1">
@@ -632,7 +697,7 @@ export const EnquiriesPage = () => {
                     </p>
                   </div>
                 ) : (
-                  messages.map((m) => {
+                  displayedMessages.map((m) => {
                     const isMe = isMyMessage(m);
                     const msgKey = m.id || m._id || `${m.createdAt}-${Math.random()}`;
 
@@ -672,6 +737,20 @@ export const EnquiriesPage = () => {
                   placeholder="Type your message or enquiry..."
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      // Prevent duplicate trigger during IME / Japanese / Chinese composition
+                      if (e.nativeEvent.isComposing || e.keyCode === 229) {
+                        e.preventDefault();
+                        return;
+                      }
+                      // If already submitting, prevent duplicate submit event
+                      if (isSendingRef.current || sending) {
+                        e.preventDefault();
+                        return;
+                      }
+                    }
+                  }}
                   disabled={sending}
                   className="flex-1 bg-surface-50 border border-surface-200 rounded-xl px-4 py-2.5 text-sm text-ink-primary focus:outline-none focus:border-brand-600 focus:bg-white transition-all disabled:opacity-60"
                 />
