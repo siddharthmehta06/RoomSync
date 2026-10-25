@@ -55,7 +55,7 @@ export async function getMatches(req, res, next) {
     }
 
     const roomDocs = await RoomListing.find(candidateFilter)
-      .populate('owner', 'fullName role avatar isVerified phone')
+      .populate('owner', 'fullName role avatar isVerified phone email bio city')
       .lean();
 
     // 4. Load interaction history for Collaborative Filtering

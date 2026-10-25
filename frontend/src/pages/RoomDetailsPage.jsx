@@ -17,9 +17,22 @@ import {
   Briefcase,
   Users,
   Shield,
-  PawPrint
+  PawPrint,
+  Phone,
+  Mail,
+  Check
 } from 'lucide-react';
-import { fetchRoomById } from '../services/api';
+import { 
+  fetchRoomById, 
+  createOrGetConversation, 
+  getAuthToken, 
+  loginDemoUser,
+  saveRoom,
+  removeSavedRoom,
+  fetchSavedRooms,
+  sendConversationMessage
+} from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { CompatibilityBadge } from '../components/ui/CompatibilityBadge';
@@ -28,10 +41,88 @@ import { Card, CardContent } from '../components/ui/Card';
 export const RoomDetailsPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user, isAuthenticated } = useAuth();
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
+  const [savingBookmark, setSavingBookmark] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
+
+  const handleStartChat = async (initialMessage = null) => {
+    try {
+      setOpeningChat(true);
+      let token = getAuthToken();
+      if (!token) {
+        navigate(`/login?redirect=/rooms/${id}`);
+        return;
+      }
+
+      const ownerId = room.owner?._id || room.owner?.id;
+      const roomId = room._id || room.id;
+
+      if (roomId) {
+        try {
+          const conversation = await createOrGetConversation({
+            roomId,
+            recipientId: ownerId,
+          }, token);
+
+          const convId = conversation._id || conversation.id;
+
+          if (initialMessage && convId) {
+            try {
+              await sendConversationMessage(convId, initialMessage, token);
+            } catch (msgErr) {
+              console.warn('Initial message sending error:', msgErr.message);
+            }
+          }
+
+          navigate(`/messages?conversationId=${convId}`);
+          return;
+        } catch (convErr) {
+          console.warn('Could not create direct conversation:', convErr.message);
+        }
+      }
+
+      navigate(`/messages?roomId=${roomId || ''}`);
+    } catch (err) {
+      navigate('/messages');
+    } finally {
+      setOpeningChat(false);
+    }
+  };
+
+  const handleRequestVisit = () => {
+    handleStartChat(
+      `Hello! I am very interested in this room (${room?.title || 'listing'}). Could I request a physical visit this coming weekend?`
+    );
+  };
+
+  const handleToggleSave = async () => {
+    if (!isAuthenticated) {
+      navigate(`/login?redirect=/rooms/${id}`);
+      return;
+    }
+
+    const roomId = room?._id || room?.id;
+    if (!roomId) return;
+
+    setSavingBookmark(true);
+    try {
+      if (isSaved) {
+        await removeSavedRoom(roomId);
+        setIsSaved(false);
+      } else {
+        await saveRoom(roomId);
+        setIsSaved(true);
+      }
+    } catch (e) {
+      console.warn('Could not toggle saved room bookmark:', e.message);
+    } finally {
+      setSavingBookmark(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -50,10 +141,21 @@ export const RoomDetailsPage = () => {
         }
       });
 
+    if (isAuthenticated) {
+      fetchSavedRooms()
+        .then((saved) => {
+          if (isMounted && Array.isArray(saved)) {
+            const match = saved.some((s) => (s.id || s._id) === id);
+            setIsSaved(match);
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [id, isAuthenticated]);
 
   if (loading) {
     return (
@@ -79,6 +181,10 @@ export const RoomDetailsPage = () => {
   }
 
   const { livingConditions } = room;
+  const ownerName = room.owner?.fullName || room.owner?.name || 'Property Owner';
+  const rawPhone = room.owner?.phone || '';
+  const cleanPhone = rawPhone.replace(/[^0-9+]/g, '');
+  const formattedPhone = rawPhone ? (rawPhone.startsWith('+') ? rawPhone : `+91 ${rawPhone}`) : null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -95,13 +201,14 @@ export const RoomDetailsPage = () => {
 
         <div className="flex items-center gap-2">
           <Button 
-            variant="ghost" 
+            variant={isSaved ? "primary" : "ghost"} 
             size="sm" 
             icon={Bookmark} 
-            onClick={() => setIsSaved(!isSaved)}
-            className={isSaved ? "text-brand-700 bg-brand-50" : ""}
+            onClick={handleToggleSave}
+            disabled={savingBookmark}
+            className={isSaved ? "text-white bg-brand-600" : ""}
           >
-            {isSaved ? "Saved" : "Bookmark"}
+            {savingBookmark ? "Updating..." : (isSaved ? "Saved in Shortlist" : "Bookmark")}
           </Button>
         </div>
       </div>
@@ -274,49 +381,124 @@ export const RoomDetailsPage = () => {
         {/* Right Sidebar: Contact & Flatmate Bio */}
         <div className="space-y-6">
           
-          {/* Owner/Flatmate Card */}
+          {/* Property Owner & Landlord Card */}
           <div className="bg-white rounded-3xl p-6 border border-black/[0.06] shadow-subtle space-y-5">
-            <div className="flex items-center gap-3.5">
-              <img
-                src={room.owner.avatar}
-                alt={room.owner.name}
-                className="w-14 h-14 rounded-full object-cover border border-brand-200"
-              />
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <h3 className="font-semibold text-base text-ink-primary">{room.owner.name}</h3>
-                  {room.owner.verified && (
-                    <ShieldCheck className="w-4 h-4 text-brand-600" title="Verified Member" />
-                  )}
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-700 block mb-3">
+                Property Owner & Landlord
+              </span>
+              <div className="flex items-center gap-3.5">
+                {room.owner?.avatar ? (
+                  <img
+                    src={room.owner.avatar}
+                    alt={ownerName}
+                    className="w-14 h-14 rounded-full object-cover border border-brand-200"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-full bg-brand-50 border border-brand-200 text-brand-800 text-lg font-semibold flex items-center justify-center">
+                    {ownerName ? ownerName[0] : 'O'}
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="font-semibold text-base text-ink-primary">{ownerName}</h3>
+                    {room.owner?.isVerified && (
+                      <ShieldCheck className="w-4 h-4 text-brand-600" title="Verified Landlord" />
+                    )}
+                  </div>
+                  <p className="text-xs text-ink-secondary">
+                    {room.owner?.role === 'owner' ? 'Verified Property Landlord' : (room.owner?.role || 'Property Host')}
+                  </p>
                 </div>
-                <p className="text-xs text-ink-secondary">{room.owner.role}</p>
               </div>
             </div>
 
-            <div className="border-t border-surface-200 pt-4 space-y-2 text-xs">
+            {/* Real Owner Contact Information */}
+            <div className="border-t border-surface-200 pt-4 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between py-1">
+                <span className="text-ink-secondary flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-ink-tertiary" /> Phone
+                </span>
+                {cleanPhone ? (
+                  <a
+                    href={`tel:${cleanPhone}`}
+                    className="font-medium text-brand-700 hover:text-brand-800 hover:underline flex items-center gap-1"
+                    title="Click to call owner"
+                  >
+                    <span>{formattedPhone}</span>
+                  </a>
+                ) : (
+                  <span className="text-ink-tertiary italic">Phone number not provided</span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between py-1">
+                <span className="text-ink-secondary flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-ink-tertiary" /> Email
+                </span>
+                {room.owner?.email ? (
+                  <a
+                    href={`mailto:${room.owner.email}`}
+                    className="font-medium text-ink-primary hover:text-brand-700 hover:underline truncate max-w-[180px]"
+                    title="Click to email owner"
+                  >
+                    {room.owner.email}
+                  </a>
+                ) : (
+                  <span className="text-ink-tertiary italic">Available upon enquiry</span>
+                )}
+              </div>
+
               <div className="flex justify-between py-1">
                 <span className="text-ink-secondary">Available From</span>
-                <span className="font-medium text-ink-primary">{room.availableFrom}</span>
+                <span className="font-medium text-ink-primary">{room.availableFrom || 'Immediate'}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-ink-secondary">Min Stay Tenure</span>
-                <span className="font-medium text-ink-primary">{room.minStayMonths} Months</span>
+                <span className="font-medium text-ink-primary">{room.minStayMonths || 6} Months</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-ink-secondary">Ranking Score (TOPSIS)</span>
-                <span className="font-semibold text-brand-700">{room.rankingScore} / 10</span>
+                <span className="font-semibold text-brand-700">{room.rankingScore || 8.5} / 10</span>
               </div>
             </div>
 
+            {/* Action Buttons: [Call Owner] [Message Owner] [Request a Visit] */}
             <div className="pt-2 flex flex-col gap-2.5">
-              <Link to="/messages">
-                <Button variant="primary" className="w-full justify-center" icon={MessageSquare}>
-                  Chat with {room.owner.name.split(' ')[0]}
-                </Button>
-              </Link>
+              {cleanPhone && (
+                <a href={`tel:${cleanPhone}`} className="w-full">
+                  <Button variant="secondary" className="w-full justify-center" icon={Phone}>
+                    Call Owner ({formattedPhone})
+                  </Button>
+                </a>
+              )}
+
+              <Button 
+                variant="primary" 
+                className="w-full justify-center" 
+                icon={MessageSquare}
+                onClick={() => handleStartChat()}
+                disabled={openingChat}
+              >
+                {openingChat 
+                  ? 'Connecting with Owner...' 
+                  : `Message Owner (${ownerName ? ownerName.split(' ')[0] : 'Landlord'})`
+                }
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full justify-center"
+                icon={Calendar}
+                onClick={handleRequestVisit}
+                disabled={openingChat}
+              >
+                Request a Visit
+              </Button>
+
               <Link to="/bookings">
-                <Button variant="outline" className="w-full justify-center">
-                  Review Agreement & Book
+                <Button variant="ghost" className="w-full justify-center text-xs text-ink-secondary">
+                  Review Digital Agreement & Book
                 </Button>
               </Link>
             </div>

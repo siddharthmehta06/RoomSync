@@ -4,6 +4,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import app from './src/app.js';
 import { connectDB } from './src/config/db.js';
 
+import { setupSocketIO } from './src/services/socketHandler.js';
+
 dotenv.config();
 
 const PORT = process.env.PORT || 5000;
@@ -21,13 +23,11 @@ const io = new SocketIOServer(server, {
   },
 });
 
-io.on('connection', (socket) => {
-  console.log(`[Socket.IO] Client connected: ${socket.id}`);
+// Attach Socket.IO to Express app for access in controllers
+app.set('io', io);
 
-  socket.on('disconnect', () => {
-    console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
-  });
-});
+// Configure Socket.IO authentication and messaging handlers
+setupSocketIO(io);
 
 // Connect database and start listening
 async function startServer() {

@@ -6,10 +6,13 @@ import {
   createRoom,
   updateRoom,
   deleteRoom,
+  uploadListingImages,
+  getMyListings,
 } from '../controllers/roomController.js';
 import { getCompatibilityPreview } from '../controllers/matchController.js';
 import { protect, authorize, optionalAuth } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { handleListingImageUpload } from '../middleware/uploadMiddleware.js';
 
 const router = express.Router();
 
@@ -142,6 +145,19 @@ const updateRoomValidation = [
 ];
 
 router.get('/', getRooms);
+router.post(
+  '/upload-images',
+  protect,
+  authorize('owner', 'admin'),
+  handleListingImageUpload,
+  uploadListingImages
+);
+router.get(
+  '/owner/my-listings',
+  protect,
+  authorize('owner', 'admin'),
+  getMyListings
+);
 router.get('/:id', optionalAuth, getRoomById);
 router.post(
   '/',

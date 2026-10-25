@@ -1,5 +1,10 @@
 import mongoose from 'mongoose';
 import RoomListing from '../models/RoomListing.js';
+import {
+  cloudinaryService,
+  isCloudinaryConfigured,
+  uploadToCloudinary,
+} from '../config/cloudinary.js';
 
 /**
  * @desc    Search and filter active room listings with pagination and sorting
@@ -76,7 +81,7 @@ export async function getRooms(req, res, next) {
 
     const [rooms, total] = await Promise.all([
       RoomListing.find(filter)
-        .populate('owner', 'fullName role avatar isVerified phone')
+        .populate('owner', 'fullName role avatar isVerified phone email bio city')
         .sort(sort)
         .skip(skip)
         .limit(limitNum),
@@ -123,7 +128,7 @@ export async function getRoomById(req, res, next) {
 
     const room = await RoomListing.findById(id).populate(
       'owner',
-      'fullName role avatar isVerified phone'
+      'fullName role avatar isVerified phone email bio city'
     );
 
     if (!room) {
@@ -377,6 +382,90 @@ export async function deleteRoom(req, res, next) {
     res.status(200).json({
       success: true,
       message: 'Listing deactivated successfully.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Upload room photographs to Cloudinary
+ * @route   POST /api/rooms/upload-images
+ * @access  Private (Owner / Admin)
+ */
+export async function uploadListingImages(req, res, next) {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image files provided for upload.',
+        error: {
+          code: 'NO_FILES_PROVIDED',
+          message: 'Please select at least one image file.',
+          details: [{ field: 'images', message: 'No files provided' }],
+        },
+      });
+    }
+
+    if (!cloudinaryService.isConfigured()) {
+      return res.status(503).json({
+        success: false,
+        message:
+          'Cloudinary media storage is not configured. Please configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the backend environment.',
+        error: {
+          code: 'CLOUDINARY_NOT_CONFIGURED',
+          message: 'Cloudinary storage service is unconfigured.',
+          details: [],
+        },
+      });
+    }
+
+    // Upload each buffer to Cloudinary
+    const uploadPromises = req.files.map((file) =>
+      cloudinaryService.uploadToCloudinary(file.buffer)
+    );
+    const results = await Promise.all(uploadPromises);
+    const urls = results.map((r) => r.secure_url);
+
+    res.status(200).json({
+      success: true,
+      message: 'Images uploaded successfully.',
+      data: {
+        urls,
+        count: urls.length,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: `Image upload failed: ${error.message}`,
+      error: {
+        code: 'UPLOAD_FAILED',
+        message: error.message,
+        details: [],
+      },
+    });
+  }
+}
+
+/**
+ * @desc    Get all listings owned by authenticated owner
+ * @route   GET /api/rooms/owner/my-listings
+ * @access  Private (Owner / Admin)
+ */
+export async function getMyListings(req, res, next) {
+  try {
+    const rooms = await RoomListing.find({
+      owner: req.user._id,
+      status: { $ne: 'deactivated' },
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: rooms,
+      meta: {
+        total: rooms.length,
+      },
     });
   } catch (error) {
     next(error);

@@ -18,6 +18,9 @@ import { EnquiriesPage } from './pages/EnquiriesPage';
 import { BookingsPage } from './pages/BookingsPage';
 import { ReviewsComplaintsPage } from './pages/ReviewsComplaintsPage';
 
+import { AuthProvider } from './context/AuthContext';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -30,57 +33,94 @@ const queryClient = new QueryClient({
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<MainLayout />}>
-            {/* 1. Home */}
-            <Route index element={<HomePage />} />
-            
-            {/* 2. Explore Rooms */}
-            <Route path="explore" element={<ExplorePage />} />
-            
-            {/* 3. Room Details */}
-            <Route path="rooms/:id" element={<RoomDetailsPage />} />
-            
-            {/* 4. Login */}
-            <Route path="login" element={<LoginPage />} />
-            
-            {/* 5. Signup */}
-            <Route path="signup" element={<SignupPage />} />
-            
-            {/* 6. Preference Onboarding */}
-            <Route path="onboarding" element={<OnboardingPage />} />
-            
-            {/* 7. Compatibility Matches */}
-            <Route path="matches" element={<MatchesPage />} />
-            
-            {/* 8. Owner Dashboard */}
-            <Route path="owner/dashboard" element={<OwnerDashboardPage />} />
-            
-            {/* 9. Create / Edit Listing */}
-            <Route path="owner/listings/new" element={<CreateListingPage />} />
-            <Route path="owner/listings/:id/edit" element={<CreateListingPage />} />
-            
-            {/* 10. Saved Rooms */}
-            <Route path="saved" element={<SavedRoomsPage />} />
-            
-            {/* 11. Profile & Settings */}
-            <Route path="profile" element={<ProfilePage />} />
-            
-            {/* 12. Enquiries & Chat */}
-            <Route path="messages" element={<EnquiriesPage />} />
-            
-            {/* 13. Booking & Agreements */}
-            <Route path="bookings" element={<BookingsPage />} />
-            
-            {/* 14. Reviews & Complaints */}
-            <Route path="reviews-complaints" element={<ReviewsComplaintsPage />} />
-            
-            {/* 404 Catch-All */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<MainLayout />}>
+              {/* 1. Home */}
+              <Route index element={<HomePage />} />
+              
+              {/* 2. Explore Rooms */}
+              <Route path="explore" element={<ExplorePage />} />
+              
+              {/* 3. Room Details */}
+              <Route path="rooms/:id" element={<RoomDetailsPage />} />
+              
+              {/* 4. Login */}
+              <Route path="login" element={<LoginPage />} />
+              
+              {/* 5. Signup */}
+              <Route path="signup" element={<SignupPage />} />
+              
+              {/* 6. Preference Onboarding */}
+              <Route path="onboarding" element={<OnboardingPage />} />
+              
+              {/* 7. Compatibility Matches */}
+              <Route path="matches" element={<MatchesPage />} />
+              
+              {/* 8. Owner Dashboard (Protected) */}
+              <Route 
+                path="owner/dashboard" 
+                element={
+                  <ProtectedRoute>
+                    <OwnerDashboardPage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* 9. Create / Edit Listing (Protected) */}
+              <Route 
+                path="owner/listings/new" 
+                element={
+                  <ProtectedRoute>
+                    <CreateListingPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="owner/listings/:id/edit" 
+                element={
+                  <ProtectedRoute>
+                    <CreateListingPage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* 10. Saved Rooms (Protected) */}
+              <Route 
+                path="saved" 
+                element={
+                  <ProtectedRoute>
+                    <SavedRoomsPage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* 11. Profile & Settings (Protected) */}
+              <Route 
+                path="profile" 
+                element={
+                  <ProtectedRoute>
+                    <ProfilePage />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* 12. Enquiries & Chat */}
+              <Route path="messages" element={<EnquiriesPage />} />
+              
+              {/* 13. Booking & Agreements */}
+              <Route path="bookings" element={<BookingsPage />} />
+              
+              {/* 14. Reviews & Complaints */}
+              <Route path="reviews-complaints" element={<ReviewsComplaintsPage />} />
+              
+              {/* 404 Catch-All */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
