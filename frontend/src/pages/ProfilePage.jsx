@@ -20,14 +20,20 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { useAuth } from '../context/AuthContext';
-import { fetchUserProfile, updateUserProfile, fetchPreferences } from '../services/api';
+import {
+  fetchUserProfile,
+  updateUserProfile,
+  fetchPreferences,
+  resendVerificationApi,
+} from '../services/api';
 
 export const ProfilePage = () => {
   const { user: authUser, token, updateUser } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationNotice, setVerificationNotice] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
 
@@ -93,6 +99,26 @@ export const ProfilePage = () => {
       isMounted = false;
     };
   }, [token]);
+
+  const handleSendVerification = async () => {
+    if (!formData.email) return;
+    try {
+      setVerifying(true);
+      setVerificationNotice(null);
+      await resendVerificationApi(formData.email);
+      setVerificationNotice({
+        type: 'success',
+        message: `Verification link dispatched to ${formData.email}. Please check your inbox.`,
+      });
+    } catch (err) {
+      setVerificationNotice({
+        type: 'error',
+        message: err.message || 'Could not dispatch verification email.',
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -216,16 +242,43 @@ export const ProfilePage = () => {
             <h2 className="text-lg font-semibold text-ink-primary">{formData.fullName || 'User'}</h2>
             <p className="text-xs text-ink-secondary">{formData.occupation || formData.company || 'RoomSync Member'}</p>
 
-            <div className="mt-3 flex justify-center gap-2">
+            <div className="mt-3 flex flex-wrap justify-center gap-2 items-center">
               <Badge variant={formData.role === 'owner' ? 'teal' : 'neutral'} size="sm">
                 {formData.role === 'owner' ? 'Property Owner' : 'Room Seeker'}
               </Badge>
-              {formData.isVerified && (
+              {formData.isVerified ? (
                 <Badge variant="teal" size="sm" icon={ShieldCheck}>
                   Verified Member
                 </Badge>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSendVerification}
+                  disabled={verifying}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80 hover:bg-amber-100 transition-colors"
+                >
+                  <Mail className="w-3 h-3 text-amber-600" />
+                  <span>{verifying ? 'Sending...' : 'Unverified · Verify Email'}</span>
+                </button>
               )}
             </div>
+
+            {verificationNotice && (
+              <div
+                className={`mt-3 p-2.5 rounded-xl text-[11px] text-left flex items-start gap-1.5 ${
+                  verificationNotice.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                }`}
+              >
+                {verificationNotice.type === 'success' ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-rose-600 mt-0.5" />
+                )}
+                <span>{verificationNotice.message}</span>
+              </div>
+            )}
 
             <div className="mt-6 pt-4 border-t border-surface-200 space-y-2 text-xs text-left">
               <div className="flex items-center gap-2 text-ink-secondary">

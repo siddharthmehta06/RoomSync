@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2, KeyRound } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2, AlertCircle, Loader2, KeyRound } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { forgotPasswordApi } from '../services/api';
@@ -10,36 +10,40 @@ export const ForgotPasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [devResetUrl, setDevResetUrl] = useState(null);
-  const [emailDeliveryMode, setEmailDeliveryMode] = useState(null);
+
+  const validateEmail = (val) => {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      return 'Email address cannot be empty. Please enter your email.';
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      return 'Please provide a valid email format (e.g., name@domain.com).';
+    }
+    return null;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setErrorMessage('Please enter your registered email address.');
+    const validationError = validateEmail(email);
+    if (validationError) {
+      setErrorMessage(validationError);
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       setLoading(true);
-      const res = await forgotPasswordApi(cleanEmail);
-      
-      if (res.devMode?.accountFound === false) {
-        setErrorMessage(res.devMode.hint);
-        return;
-      }
-
+      await forgotPasswordApi(cleanEmail);
       setSubmitted(true);
-      const url = res.resetUrl || res.devMode?.resetUrl;
-      if (url) {
-        setDevResetUrl(url);
-        setEmailDeliveryMode(res.devMode?.emailDeliveryMode || 'development_simulated');
-      }
     } catch (err) {
-      setErrorMessage(err.message || 'Unable to process your request. Please try again.');
+      // In case of network errors or server exceptions
+      setErrorMessage(
+        err.message || 'Unable to process your request at this time. Please try again later.'
+      );
     } finally {
       setLoading(false);
     }
@@ -47,88 +51,62 @@ export const ForgotPasswordPage = () => {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-md p-8 sm:p-10 shadow-apple bg-white">
+      <Card className="w-full max-w-md p-8 sm:p-10 shadow-apple bg-white rounded-3xl border border-black/[0.06]">
         
-        {/* Header Icon */}
-        <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 mx-auto mb-6">
-          <KeyRound className="w-6 h-6" />
-        </div>
+        {/* RoomSync Branding & Header Icon */}
+        <div className="text-center space-y-3 mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 border border-brand-200/60 text-brand-800 text-xs font-medium">
+            <span className="w-2 h-2 rounded-full bg-brand-600 animate-pulse"></span>
+            RoomSync Security
+          </div>
+          
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 border border-brand-200 flex items-center justify-center text-brand-700 mx-auto">
+            <KeyRound className="w-6 h-6" />
+          </div>
 
-        <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold tracking-tight text-ink-primary">
-            Reset Your Password
+            Forgot Your Password?
           </h1>
-          <p className="text-xs text-ink-secondary mt-1.5 leading-relaxed">
-            Enter your registered email address and we'll send you a secure link to reset your account password.
+          <p className="text-xs text-ink-secondary leading-relaxed max-w-xs mx-auto">
+            Enter your registered email address. We will send you a secure link to reset your password.
           </p>
         </div>
 
         {errorMessage && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2.5">
+          <div className="mb-6 p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-700 flex items-start gap-2.5 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <span>{errorMessage}</span>
+            <span className="leading-relaxed">{errorMessage}</span>
           </div>
         )}
 
         {submitted ? (
           <div className="space-y-6 animate-fadeIn">
-            <div className={`p-5 rounded-2xl border text-xs flex items-start gap-3 ${emailDeliveryMode === 'development_simulated' || emailDeliveryMode === 'fallback_logged' ? 'bg-amber-50 border-amber-200 text-amber-950' : 'bg-emerald-50/80 border-emerald-200 text-emerald-900'}`}>
-              {emailDeliveryMode === 'development_simulated' || emailDeliveryMode === 'fallback_logged'
-                ? <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                : <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />}
+            <div className="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-900 flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <span className="font-semibold block">
-                  Password Reset Link Generated
+                <span className="font-semibold block text-emerald-950 text-sm">
+                  Check Your Inbox
                 </span>
-                <p className={`leading-relaxed ${emailDeliveryMode === 'development_simulated' || emailDeliveryMode === 'fallback_logged' ? 'text-amber-800' : 'text-emerald-800'}`}>
-                  {emailDeliveryMode === 'development_simulated' || emailDeliveryMode === 'fallback_logged'
-                    ? `External email delivery is not configured in local development. Your secure 15-minute reset link has been generated below so you can proceed immediately.`
-                    : `If an account with ${email} exists, a 15-minute secure reset link has been dispatched to your email.`}
+                <p className="leading-relaxed text-emerald-800">
+                  If an account exists with this email address, you will receive a password reset link shortly. Please check your inbox.
                 </p>
               </div>
             </div>
 
-            {devResetUrl && (
-              <div className="p-4 rounded-2xl bg-brand-50/60 border border-brand-200 space-y-3 text-xs">
-                <div>
-                  <span className="font-semibold text-brand-900 block text-xs">
-                    Instant Password Reset Action
-                  </span>
-                  <p className="text-brand-700 text-[11px] mt-0.5">
-                    Click the button below to set your new password immediately:
-                  </p>
-                </div>
-                
-                <a
-                  href={devResetUrl}
-                  className="w-full inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-brand-600 text-white rounded-xl font-medium text-xs hover:bg-brand-700 transition-colors shadow-sm"
-                >
-                  <span>Reset Password Now</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </a>
-
-                <div className="pt-1">
-                  <span className="text-[10px] text-ink-tertiary block mb-1">Direct URL:</span>
-                  <a
-                    href={devResetUrl}
-                    className="font-mono text-[10px] text-ink-secondary hover:text-brand-700 underline break-all block p-2 bg-white rounded-lg border border-surface-200"
-                  >
-                    {devResetUrl}
-                  </a>
-                </div>
-              </div>
-            )}
+            <p className="text-[11px] text-ink-tertiary text-center leading-relaxed">
+              Didn't receive an email? Check your spam or promotions folder, or request another link in 15 minutes.
+            </p>
 
             <div className="pt-2">
-              <Link to="/login">
+              <Link to="/login" className="block w-full">
                 <Button variant="outline" className="w-full justify-center" icon={ArrowLeft}>
-                  Return to Login
+                  Back to Login
                 </Button>
               </Link>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div>
               <label htmlFor="reset-email" className="block text-xs font-medium text-ink-primary mb-1.5">
                 Registered Email Address
@@ -140,10 +118,14 @@ export const ForgotPasswordPage = () => {
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  placeholder="name@domain.com"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-surface-300 text-xs text-ink-primary focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-600 transition-all bg-surface-50/50"
                   disabled={loading}
+                  autoComplete="email"
                 />
               </div>
             </div>
@@ -152,11 +134,10 @@ export const ForgotPasswordPage = () => {
               type="submit"
               variant="primary"
               className="w-full justify-center"
-              icon={loading ? Loader2 : ArrowRight}
-              iconPosition="right"
+              icon={loading ? Loader2 : null}
               disabled={loading}
             >
-              {loading ? 'Sending Instructions...' : 'Send Reset Link'}
+              {loading ? 'Sending Reset Link...' : 'Send Reset Link'}
             </Button>
 
             <div className="text-center pt-2">
@@ -164,7 +145,7 @@ export const ForgotPasswordPage = () => {
                 to="/login"
                 className="text-xs text-ink-secondary hover:text-brand-700 font-medium transition-colors inline-flex items-center gap-1.5"
               >
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to Sign In
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Login
               </Link>
             </div>
           </form>
@@ -174,3 +155,5 @@ export const ForgotPasswordPage = () => {
     </div>
   );
 };
+
+export default ForgotPasswordPage;
