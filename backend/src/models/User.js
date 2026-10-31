@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const userSchema = new mongoose.Schema(
   {
@@ -72,7 +73,7 @@ const userSchema = new mongoose.Schema(
     city: {
       type: String,
       trim: true,
-      default: 'Bengaluru',
+      default: 'Mumbai',
       maxlength: [50, 'City cannot exceed 50 characters'],
     },
     bio: {
@@ -84,6 +85,14 @@ const userSchema = new mongoose.Schema(
     hasCompletedOnboarding: {
       type: Boolean,
       default: false,
+    },
+    resetPasswordToken: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpire: {
+      type: Date,
+      select: false,
     },
   },
   {
@@ -123,6 +132,26 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
     return false;
   }
   return await bcrypt.compare(enteredPassword, this.password);
+};
+
+/**
+ * Generate cryptographically secure random token, store hashed version in DB,
+ * and return the unhashed plain token to be sent to user via reset link
+ */
+userSchema.methods.getResetPasswordToken = function () {
+  // Generate random 20-byte token as hex string
+  const resetToken = crypto.randomBytes(20).toString('hex');
+
+  // Hash token using SHA-256 for secure database storage
+  this.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  // Set token expiration to 15 minutes from now
+  this.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+
+  return resetToken;
 };
 
 const User = mongoose.model('User', userSchema);

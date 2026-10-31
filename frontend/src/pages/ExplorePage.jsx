@@ -9,10 +9,12 @@ import { fetchRooms } from '../services/api';
 
 export const ExplorePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialCity = searchParams.get('city') || 'All';
+  const initialCity = searchParams.get('city') || 'Mumbai';
+  const initialLocality = searchParams.get('locality') || 'All';
   const initialMaxRent = searchParams.get('maxRent') || '';
 
   const [city, setCity] = useState(initialCity);
+  const [locality, setLocality] = useState(initialLocality);
   const [maxRent, setMaxRent] = useState(initialMaxRent);
   const [furnishing, setFurnishing] = useState('All');
   const [rooms, setRooms] = useState([]);
@@ -22,7 +24,7 @@ export const ExplorePage = () => {
     let isMounted = true;
     setLoading(true);
 
-    fetchRooms({ city, maxRent }).then((data) => {
+    fetchRooms({ city, locality, maxRent }).then((data) => {
       if (isMounted) {
         let filtered = data;
         if (furnishing !== 'All') {
@@ -36,10 +38,11 @@ export const ExplorePage = () => {
     return () => {
       isMounted = false;
     };
-  }, [city, maxRent, furnishing]);
+  }, [city, locality, maxRent, furnishing]);
 
   const handleResetFilters = () => {
-    setCity('All');
+    setCity('Mumbai');
+    setLocality('All');
     setMaxRent('');
     setFurnishing('All');
     setSearchParams({});
@@ -49,31 +52,69 @@ export const ExplorePage = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
       
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight text-ink-primary">Explore Shared Living</h1>
-        <p className="text-sm text-ink-secondary mt-1">
-          Browse verified residential listings with explicit house rules, flatmate lifestyle profiles, and rental terms.
-        </p>
+      <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-teal-800 text-[11px] font-medium mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-600"></span>
+            Mumbai Demonstration Edition (50+ Andheri Listings)
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink-primary">Explore Shared Living in Mumbai</h1>
+          <p className="text-sm text-ink-secondary mt-1">
+            Browse realistic sample residential rooms in Andheri East & West with verified living conditions and lifestyle compatibility.
+          </p>
+        </div>
       </div>
 
       {/* Filter Bar */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-black/[0.06] shadow-subtle mb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           
           {/* City Filter */}
           <div>
-            <label className="block text-xs font-medium text-ink-secondary mb-1.5">Metro City</label>
+            <label className="block text-xs font-medium text-ink-secondary mb-1.5">City</label>
             <select
               value={city}
               onChange={(e) => setCity(e.target.value)}
               className="w-full bg-surface-50 border border-surface-200 text-sm rounded-xl px-3 py-2 text-ink-primary focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
             >
-              <option value="All">All Metros</option>
-              <option value="Bengaluru">Bengaluru</option>
-              <option value="Pune">Pune</option>
-              <option value="Hyderabad">Hyderabad</option>
-              <option value="Delhi-NCR">Delhi-NCR</option>
               <option value="Mumbai">Mumbai</option>
+              <option value="All">All Cities</option>
+            </select>
+          </div>
+
+          {/* Locality Filter */}
+          <div>
+            <label className="block text-xs font-medium text-ink-secondary mb-1.5">Locality (Andheri)</label>
+            <select
+              value={locality}
+              onChange={(e) => setLocality(e.target.value)}
+              className="w-full bg-surface-50 border border-surface-200 text-sm rounded-xl px-3 py-2 text-ink-primary focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
+            >
+              <option value="All">All Andheri</option>
+              <optgroup label="Andheri West">
+                <option value="Lokhandwala">Lokhandwala</option>
+                <option value="Versova">Versova</option>
+                <option value="Oshiwara">Oshiwara</option>
+                <option value="DN Nagar">DN Nagar</option>
+                <option value="Seven Bungalows">Seven Bungalows</option>
+                <option value="Four Bungalows">Four Bungalows</option>
+                <option value="Veera Desai">Veera Desai Road</option>
+                <option value="Azad Nagar">Azad Nagar</option>
+                <option value="Shastri Nagar">Shastri Nagar</option>
+                <option value="Model Town">Model Town</option>
+              </optgroup>
+              <optgroup label="Andheri East">
+                <option value="Chakala">Chakala</option>
+                <option value="JB Nagar">JB Nagar</option>
+                <option value="Marol">Marol</option>
+                <option value="Saki Naka">Saki Naka</option>
+                <option value="MIDC">MIDC</option>
+                <option value="Mahakali Caves">Mahakali Caves</option>
+                <option value="Sher-E-Punjab">Sher-E-Punjab</option>
+                <option value="Poonam Nagar">Poonam Nagar</option>
+                <option value="Gundavali">Gundavali</option>
+                <option value="Sahar">Sahar / Airport</option>
+              </optgroup>
             </select>
           </div>
 
@@ -82,7 +123,7 @@ export const ExplorePage = () => {
             <label className="block text-xs font-medium text-ink-secondary mb-1.5">Max Rent (₹/month)</label>
             <input
               type="number"
-              placeholder="e.g. 20000"
+              placeholder="e.g. 25000"
               value={maxRent}
               onChange={(e) => setMaxRent(e.target.value)}
               className="w-full bg-surface-50 border border-surface-200 text-sm rounded-xl px-3 py-2 text-ink-primary focus:outline-none focus:border-brand-600 focus:ring-1 focus:ring-brand-500"
@@ -100,6 +141,7 @@ export const ExplorePage = () => {
               <option value="All">Any Furnishing</option>
               <option value="Fully">Fully Furnished</option>
               <option value="Semi">Semi-Furnished</option>
+              <option value="Unfurnished">Unfurnished</option>
             </select>
           </div>
 
@@ -151,8 +193,9 @@ export const ExplorePage = () => {
                   alt={room.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
-                <div className="absolute top-3 left-3">
-                  <CompatibilityBadge score={room.compatibilityScore} />
+                <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-md text-ink-primary text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-2xs flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-brand-600" />
+                  <span>{room.locality?.split(',')[0] || 'Andheri'}</span>
                 </div>
                 <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md text-white text-xs font-medium px-2.5 py-1 rounded-full">
                   {room.furnishing}

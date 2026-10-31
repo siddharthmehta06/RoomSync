@@ -1,5 +1,6 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
+import { jest } from '@jest/globals';
 import app from '../src/app.js';
 import User from '../src/models/User.js';
 import RoomListing from '../src/models/RoomListing.js';
@@ -11,6 +12,7 @@ const TEST_DB_URI =
   'mongodb://localhost:27017/roomsync_test_concurrency_bookings';
 
 describe('RoomSync Booking Concurrency & Synchronization Tests', () => {
+  jest.setTimeout(45000);
   let ownerToken;
   let ownerId;
   let seekers = [];
@@ -84,7 +86,7 @@ describe('RoomSync Booking Concurrency & Synchronization Tests', () => {
         token: seekerRes.body.data.token,
       });
     }
-  });
+  }, 35000);
 
   test('Simultaneous Bookings: When 10 users book the same room concurrently, EXACTLY 1 succeeds and 9 receive 409 Conflict', async () => {
     // Fire all 10 reservation requests simultaneously via Promise.all

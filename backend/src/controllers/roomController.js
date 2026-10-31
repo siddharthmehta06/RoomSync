@@ -1,10 +1,22 @@
 import mongoose from 'mongoose';
 import RoomListing from '../models/RoomListing.js';
+import VisitRequest from '../models/VisitRequest.js';
+import { summarizeReviews } from './roomReviewController.js';
 import {
   cloudinaryService,
   isCloudinaryConfigured,
   uploadToCloudinary,
 } from '../config/cloudinary.js';
+
+/**
+ * Validates whether a string is a valid Google Maps link
+ */
+export function isValidGoogleMapsUrl(url) {
+  if (!url || typeof url !== 'string') return true;
+  const trimmed = url.trim();
+  if (trimmed === '') return true;
+  return /^https?:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(trimmed);
+}
 
 /**
  * @desc    Search and filter active room listings with pagination and sorting
@@ -81,6 +93,7 @@ export async function getRooms(req, res, next) {
 
     const [rooms, total] = await Promise.all([
       RoomListing.find(filter)
+        .select('-reviews')
         .populate('owner', 'fullName role avatar isVerified phone email bio city')
         .sort(sort)
         .skip(skip)
@@ -162,9 +175,52 @@ export async function getRoomById(req, res, next) {
       }
     }
 
+    // Privacy Guard for Exact Address and Google Maps URL:
+    // If address is marked private, do not expose exact address or Google Maps URL
+    // unless the requester is the owner OR has an Accepted visit request.
+    const roomObj = room.toObject ? room.toObject() : { ...room };
+    roomObj.id = (room._id || roomObj._id).toString();
+    roomObj.reviewSummary = summarizeReviews(room.reviews, req.user?._id);
+    delete roomObj.reviews;
+    let canViewExactLocation = false;
+
+    if (req.user) {
+      const isOwner = req.user._id.toString() === room.owner._id.toString();
+      if (isOwner || req.user.role === 'admin') {
+        canViewExactLocation = true;
+      } else {
+        const hasAcceptedVisit = await VisitRequest.exists({
+          room: room._id,
+          seeker: req.user._id,
+          status: 'Accepted',
+        });
+        if (hasAcceptedVisit) {
+          canViewExactLocation = true;
+        }
+      }
+    }
+
+    if (!room.isAddressPrivate) {
+      canViewExactLocation = true;
+    }
+
+    // Google Maps Location is always available to seekers so they can inspect the locality before requesting a visit
+    roomObj.googleMapsUrl = room.googleMapsUrl || (room.locality ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(room.locality + ', Mumbai')}` : null);
+
+    // Private exact residential apartment/flat number guard
+    if (!canViewExactLocation) {
+      roomObj.exactAddress = null;
+      roomObj.isExactAddressPrivate = true;
+      roomObj.locationPrivacyNotice =
+        'Specific apartment number will be provided once the owner accepts your visit request.';
+    } else {
+      roomObj.isExactAddressPrivate = false;
+    }
+    roomObj.isLocationLocked = false;
+
     res.status(200).json({
       success: true,
-      data: room,
+      data: roomObj,
     });
   } catch (error) {
     next(error);
@@ -195,16 +251,31 @@ export async function createRoom(req, res, next) {
       images,
       amenities,
       livingConditions,
+      exactAddress,
+      googleMapsUrl,
+      isAddressPrivate,
     } = req.body;
+
+    // Validate Google Maps URL if supplied
+    if (googleMapsUrl && !isValidGoogleMapsUrl(googleMapsUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid Google Maps URL (e.g. https://maps.app.goo.gl/... or https://www.google.com/maps/...).',
+        error: { code: 'INVALID_MAPS_URL', message: 'Invalid Google Maps URL format.' },
+      });
+    }
 
     const room = await RoomListing.create({
       owner: req.user._id, // Enforce server-assigned owner
       title: title ? title.trim() : '',
       locality: locality ? locality.trim() : '',
-      city: city ? city.trim() : 'Bengaluru',
-      state: state ? state.trim() : 'Karnataka',
+      city: city ? city.trim() : 'Mumbai',
+      state: state ? state.trim() : 'Maharashtra',
       pinCode: pinCode ? pinCode.trim() : '',
-      location: location || { type: 'Point', coordinates: [77.5946, 12.9716] },
+      exactAddress: exactAddress ? exactAddress.trim() : '',
+      googleMapsUrl: googleMapsUrl ? googleMapsUrl.trim() : '',
+      isAddressPrivate: isAddressPrivate !== undefined ? Boolean(isAddressPrivate) : true,
+      location: location || { type: 'Point', coordinates: [72.8697, 19.1136] }, // Andheri default
       rent: Number(rent),
       maintenance: maintenance !== undefined ? Number(maintenance) : 0,
       deposit: Number(deposit),
@@ -297,7 +368,18 @@ export async function updateRoom(req, res, next) {
       'images',
       'amenities',
       'status',
+      'exactAddress',
+      'googleMapsUrl',
+      'isAddressPrivate',
     ];
+
+    if (req.body.googleMapsUrl && !isValidGoogleMapsUrl(req.body.googleMapsUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid Google Maps URL (e.g. https://maps.app.goo.gl/... or https://www.google.com/maps/...).',
+        error: { code: 'INVALID_MAPS_URL', message: 'Invalid Google Maps URL format.' },
+      });
+    }
 
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {

@@ -19,11 +19,28 @@ import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { CompatibilityBadge } from '../components/ui/CompatibilityBadge';
 import { MOCK_ROOMS } from '../data/mockRooms';
-import { fetchMyListings } from '../services/api';
+import { fetchMyListings, fetchMyVisitsApi, updateVisitStatusApi } from '../services/api';
 
 export const OwnerDashboardPage = () => {
   const [listings, setListings] = useState([]);
   const [loadingListings, setLoadingListings] = useState(true);
+  const [visits, setVisits] = useState([]);
+  const [loadingVisits, setLoadingVisits] = useState(true);
+  const [updatingVisitId, setUpdatingVisitId] = useState(null);
+  const [visitActionNotice, setVisitActionNotice] = useState(null);
+
+  const loadVisits = () => {
+    setLoadingVisits(true);
+    fetchMyVisitsApi('owner')
+      .then((data) => {
+        setVisits(data || []);
+        setLoadingVisits(false);
+      })
+      .catch((err) => {
+        console.warn('Could not load owner visits:', err.message);
+        setLoadingVisits(false);
+      });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -33,7 +50,6 @@ export const OwnerDashboardPage = () => {
           if (Array.isArray(data) && data.length > 0) {
             setListings(data);
           } else {
-            // If no database listings yet, show starter mock listings
             setListings(MOCK_ROOMS.slice(0, 2));
           }
           setLoadingListings(false);
@@ -46,16 +62,39 @@ export const OwnerDashboardPage = () => {
         }
       });
 
+    loadVisits();
+
     return () => {
       isMounted = false;
     };
   }, []);
 
+  const handleUpdateVisitStatus = async (visitId, newStatus) => {
+    setUpdatingVisitId(visitId);
+    setVisitActionNotice(null);
+    try {
+      await updateVisitStatusApi(visitId, newStatus);
+      setVisitActionNotice(
+        newStatus === 'Accepted'
+          ? 'Visit request accepted! Exact property address and Google Maps link are now unlocked for this seeker.'
+          : 'Visit request marked as rejected.'
+      );
+      loadVisits();
+    } catch (err) {
+      alert(`Could not update visit request: ${err.message}`);
+    } finally {
+      setUpdatingVisitId(null);
+    }
+  };
+
+  const pendingVisitsCount = visits.filter((v) => v.status === 'Pending').length;
+  const acceptedVisitsCount = visits.filter((v) => v.status === 'Accepted').length;
+
   const stats = [
-    { label: 'Active Listings', value: String(listings.length || 2), icon: Home, trend: '+1 this month' },
-    { label: 'Seeker Enquiries', value: '18', icon: MessageSquare, trend: '4 pending reply' },
-    { label: 'Scheduled Visits', value: '5', icon: Calendar, trend: '2 this weekend' },
-    { label: 'Avg Compatibility', value: '89%', icon: TrendingUp, trend: 'High match quality' },
+    { label: 'Active Listings', value: String(listings.length || 0), icon: Home, trend: 'Andheri, Mumbai' },
+    { label: 'Pending Visits', value: String(pendingVisitsCount), icon: Clock, trend: `${pendingVisitsCount} await decision` },
+    { label: 'Confirmed Visits', value: String(acceptedVisitsCount), icon: Calendar, trend: 'Unlocked map locations' },
+    { label: 'Location Privacy', value: 'Protected', icon: ShieldCheck, trend: 'Hidden until approved' },
   ];
 
   const recentEnquiries = [
@@ -198,6 +237,144 @@ export const OwnerDashboardPage = () => {
                 </div>
               </Card>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Visit Action Notice Banner */}
+      {visitActionNotice && (
+        <div className="mb-8 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center justify-between shadow-subtle animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-medium">{visitActionNotice}</span>
+          </div>
+          <button 
+            onClick={() => setVisitActionNotice(null)}
+            className="text-xs text-emerald-700 hover:text-emerald-900 underline ml-4"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Incoming Visit Requests Section */}
+      <div className="mb-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-ink-primary flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-brand-600" />
+              Incoming Visit & Walkthrough Requests
+            </h2>
+            <p className="text-xs text-ink-secondary mt-0.5">
+              Review and approve in-person visits. Accepting unlocks your exact address & Google Maps link for the seeker.
+            </p>
+          </div>
+          <span className="text-xs font-medium text-ink-secondary">
+            {visits.length} request{visits.length === 1 ? '' : 's'} total
+          </span>
+        </div>
+
+        {loadingVisits ? (
+          <div className="py-8 text-center bg-white rounded-2xl border border-surface-200">
+            <Loader2 className="w-5 h-5 text-brand-600 animate-spin mx-auto mb-2" />
+            <p className="text-xs text-ink-secondary">Loading visit requests...</p>
+          </div>
+        ) : visits.length === 0 ? (
+          <div className="p-6 text-center bg-white rounded-2xl border border-dashed border-surface-300">
+            <Calendar className="w-8 h-8 text-ink-tertiary mx-auto mb-2" />
+            <h3 className="font-semibold text-xs text-ink-primary">No visit requests received yet</h3>
+            <p className="text-[11px] text-ink-secondary mt-0.5">
+              When seekers request a walkthrough of your Andheri listings, their appointment proposals will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {visits.map((v) => {
+              const isUpdating = updatingVisitId === (v.id || v._id);
+              const seekerName = v.seeker?.fullName || 'Interested Seeker';
+              const seekerPhone = v.seeker?.phone || 'Contact on chat';
+              const roomTitle = v.room?.title || 'Listed Property';
+              const statusVariant = v.status === 'Accepted' ? 'emerald' : v.status === 'Pending' ? 'amber' : 'neutral';
+
+              return (
+                <Card key={v.id || v._id} className="p-4 sm:p-5 bg-white border border-surface-200">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-ink-primary">{seekerName}</span>
+                        <Badge variant={statusVariant} size="sm">
+                          {v.status}
+                        </Badge>
+                        <span className="text-xs text-ink-tertiary">· Phone: {seekerPhone}</span>
+                      </div>
+
+                      <p className="text-xs text-ink-secondary">
+                        <span className="font-medium text-ink-primary">Property:</span> {roomTitle}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-ink-secondary pt-1">
+                        <span className="flex items-center gap-1 text-ink-primary font-medium">
+                          <Calendar className="w-3.5 h-3.5 text-brand-600" />
+                          {v.visitDate}
+                        </span>
+                        <span className="flex items-center gap-1 text-ink-primary font-medium">
+                          <Clock className="w-3.5 h-3.5 text-brand-600" />
+                          {v.visitTime}
+                        </span>
+                      </div>
+
+                      {v.message && (
+                        <div className="mt-2 p-2.5 rounded-xl bg-surface-50 border border-surface-200/60 text-xs text-ink-secondary italic">
+                          "{v.message}"
+                        </div>
+                      )}
+
+                      {v.status === 'Accepted' && (
+                        <p className="text-[11px] text-emerald-800 font-medium pt-1">
+                          ✓ Exact address and Google Maps location have been unlocked for {seekerName}.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Action Buttons for Landlord */}
+                    {v.status === 'Pending' && (
+                      <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-surface-200">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          className="bg-emerald-700 hover:bg-emerald-800 text-white"
+                          disabled={isUpdating}
+                          onClick={() => handleUpdateVisitStatus(v.id || v._id, 'Accepted')}
+                        >
+                          {isUpdating ? 'Updating...' : 'Accept Visit & Unlock Map'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-rose-600 border-rose-200 hover:bg-rose-50"
+                          disabled={isUpdating}
+                          onClick={() => handleUpdateVisitStatus(v.id || v._id, 'Rejected')}
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    )}
+
+                    {v.status === 'Accepted' && (
+                      <div className="shrink-0">
+                        <Link to={`/rooms/${v.room?._id || v.room?.id || v.room}`}>
+                          <Button variant="secondary" size="sm" icon={Eye}>
+                            View Listing
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
+
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

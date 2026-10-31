@@ -8,6 +8,8 @@ import { ExplorePage } from './pages/ExplorePage';
 import { RoomDetailsPage } from './pages/RoomDetailsPage';
 import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { MatchesPage } from './pages/MatchesPage';
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage';
@@ -48,6 +50,10 @@ export function App() {
               
               {/* 4. Login */}
               <Route path="login" element={<LoginPage />} />
+              
+              {/* 4b. Password Reset */}
+              <Route path="forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="reset-password/:token" element={<ResetPasswordPage />} />
               
               {/* 5. Signup */}
               <Route path="signup" element={<SignupPage />} />

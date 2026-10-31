@@ -3,6 +3,7 @@ import PreferenceProfile from '../models/PreferenceProfile.js';
 import RoomListing from '../models/RoomListing.js';
 import Interaction from '../models/Interaction.js';
 import { calculateMatches } from '../services/MatchingEngine.js';
+import { checkFactorsCompletion } from '../utils/factorValidation.js';
 
 /**
  * @desc    Get personalized, explainable room matches evaluated by the 22-factor engine
@@ -19,11 +20,31 @@ export async function getMatches(req, res, next) {
     if (!profile) {
       return res.status(400).json({
         success: false,
-        message: 'Preference profile not found. Please complete the 22-factor onboarding survey.',
+        message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
         error: {
           code: 'PROFILE_INCOMPLETE',
-          message: 'Preference profile not found. Please complete the 22-factor onboarding survey.',
+          message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
+          completedCount: 0,
+          totalFactors: 22,
+          progressText: '0/22 factors completed',
           details: [],
+        },
+      });
+    }
+
+    // Verify that all 22 factors have valid inputs before calculating scores
+    const completion = checkFactorsCompletion(profile);
+    if (!completion.isComplete) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
+        error: {
+          code: 'PROFILE_INCOMPLETE',
+          message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
+          completedCount: completion.completedCount,
+          totalFactors: completion.totalFactors,
+          progressText: completion.progressText,
+          missingFactors: completion.missingFactors,
         },
       });
     }
@@ -267,11 +288,30 @@ export async function getCompatibilityPreview(req, res, next) {
     if (!profile) {
       return res.status(400).json({
         success: false,
-        message: 'Preference profile not found. Please complete the 22-factor onboarding survey.',
+        message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
         error: {
           code: 'PROFILE_INCOMPLETE',
-          message: 'Preference profile not found. Please complete the 22-factor onboarding survey.',
+          message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
+          completedCount: 0,
+          totalFactors: 22,
+          progressText: '0/22 factors completed',
           details: [],
+        },
+      });
+    }
+
+    const completion = checkFactorsCompletion(profile);
+    if (!completion.isComplete) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
+        error: {
+          code: 'PROFILE_INCOMPLETE',
+          message: 'Please complete all 22 preference factors to complete onboarding and calculate your compatibility score.',
+          completedCount: completion.completedCount,
+          totalFactors: completion.totalFactors,
+          progressText: completion.progressText,
+          missingFactors: completion.missingFactors,
         },
       });
     }

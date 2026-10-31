@@ -1,6 +1,12 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { register, login, getMe } from '../controllers/authController.js';
+import {
+  register,
+  login,
+  getMe,
+  forgotPassword,
+  resetPassword,
+} from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 
@@ -54,9 +60,38 @@ const loginValidation = [
   validateRequest,
 ];
 
+/**
+ * Validation rules for forgot password
+ */
+const forgotPasswordValidation = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email address'),
+  validateRequest,
+];
+
+/**
+ * Validation rules for password reset
+ */
+const resetPasswordValidation = [
+  body('password')
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters'),
+  validateRequest,
+];
+
 // Mount endpoints
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
 router.get('/me', protect, getMe);
+router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
+router.post('/reset-password/:token', resetPasswordValidation, resetPassword);
+router.put('/reset-password/:token', resetPasswordValidation, resetPassword);
 
 export default router;
+

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Lock, Mail, ArrowRight, UserCheck, Shield, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 
 export const LoginPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, refreshUser } = useAuth();
   const [role, setRole] = useState('seeker');
   const [email, setEmail] = useState('');
@@ -23,10 +24,17 @@ export const LoginPage = () => {
     try {
       const data = await login(email, password);
       const userRole = data.user?.role || role;
+      const redirect = searchParams.get('redirect');
+
       if (userRole === 'owner') {
         navigate('/owner/dashboard');
       } else {
-        navigate('/matches');
+        // Room seekers land on Explore by default
+        if (redirect && !redirect.startsWith('/matches') && !redirect.startsWith('/dashboard')) {
+          navigate(redirect);
+        } else {
+          navigate('/explore');
+        }
       }
     } catch (err) {
       setError(err.message || 'Login failed. Please verify credentials.');
@@ -46,7 +54,8 @@ export const LoginPage = () => {
       if (selectedRole === 'owner') {
         navigate('/owner/dashboard');
       } else {
-        navigate('/matches');
+        // Demo seekers land on Explore by default
+        navigate('/explore');
       }
     } catch (err) {
       setError(err.message || 'Demo login failed');
@@ -124,7 +133,7 @@ export const LoginPage = () => {
               <input type="checkbox" className="rounded text-brand-600 focus:ring-brand-500" defaultChecked />
               <span>Remember me</span>
             </label>
-            <a href="#forgot" className="text-brand-700 hover:underline">Forgot password?</a>
+            <Link to="/forgot-password" className="text-brand-700 hover:underline font-medium">Forgot password?</Link>
           </div>
 
           <Button type="submit" variant="primary" className="w-full justify-center" size="md" disabled={loading}>
