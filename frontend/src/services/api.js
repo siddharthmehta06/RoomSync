@@ -628,3 +628,100 @@ export async function savePreferencesApi(preferencesData, customToken) {
 
   return data.data;
 }
+
+// ==========================================
+// Booking & Reservation APIs
+// ==========================================
+
+export async function reserveRoomListing(bookingPayload, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/reserve`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify(bookingPayload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const errorMsg = data.error?.message || data.message || 'Failed to reserve room.';
+    const err = new Error(errorMsg);
+    err.code = data.error?.code || 'RESERVATION_FAILED';
+    err.details = data.error?.details || [];
+    throw err;
+  }
+
+  return data.data;
+}
+
+export async function fetchMyBookings(customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/my-bookings`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch bookings.');
+  }
+
+  return data.data || [];
+}
+
+export async function fetchOwnerBookings(customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/owner-bookings`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch owner bookings.');
+  }
+
+  return data.data || [];
+}
+
+export async function fetchBookingById(bookingId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch booking details.');
+  }
+
+  return data.data;
+}
+
+export async function cancelBookingApi(bookingId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}/cancel`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to cancel booking.');
+  }
+
+  return data.data;
+}
+
+export async function confirmBookingApi(bookingId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}/confirm`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to confirm booking.');
+  }
+
+  return data.data;
+}
+

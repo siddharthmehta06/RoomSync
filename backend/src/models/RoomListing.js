@@ -240,6 +240,15 @@ const roomListingSchema = new mongoose.Schema(
       },
       default: 'active',
     },
+    reservedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    reservedUntil: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

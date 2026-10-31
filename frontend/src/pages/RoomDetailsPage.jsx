@@ -496,7 +496,7 @@ export const RoomDetailsPage = () => {
                 Request a Visit
               </Button>
 
-              <Link to="/bookings">
+              <Link to={`/bookings?roomId=${room._id || room.id}`}>
                 <Button variant="ghost" className="w-full justify-center text-xs text-ink-secondary">
                   Review Digital Agreement & Book
                 </Button>
