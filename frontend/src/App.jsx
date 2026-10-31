@@ -10,6 +10,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SignupPage } from './pages/SignupPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { VerifyEmailPage } from './pages/VerifyEmailPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { MatchesPage } from './pages/MatchesPage';
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage';
@@ -51,9 +52,11 @@ export function App() {
               {/* 4. Login */}
               <Route path="login" element={<LoginPage />} />
               
-              {/* 4b. Password Reset */}
+              {/* 4b. Password Reset & Verification */}
               <Route path="forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="reset-password" element={<ResetPasswordPage />} />
               <Route path="reset-password/:token" element={<ResetPasswordPage />} />
+              <Route path="verify-email" element={<VerifyEmailPage />} />
               
               {/* 5. Signup */}
               <Route path="signup" element={<SignupPage />} />
