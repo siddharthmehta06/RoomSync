@@ -36,3 +36,8 @@ Thumbs.db
 
 # Testing
 coverage/
+
+# Local databases
+.mongo-data/
+backend/.mongo-data/
+
