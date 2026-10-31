@@ -24,7 +24,7 @@ export const HomePage = () => {
   const navigate = useNavigate();
 
   // Search panel state
-  const [selectedCity, setSelectedCity] = useState('Bengaluru');
+  const [selectedCity, setSelectedCity] = useState('Mumbai');
   const [maxRent, setMaxRent] = useState('');
   const [moveInTimeline, setMoveInTimeline] = useState('Flexible');
   const [savedRooms, setSavedRooms] = useState({});
@@ -120,12 +120,8 @@ export const HomePage = () => {
                     onChange={(e) => setSelectedCity(e.target.value)}
                     className="w-full bg-transparent text-sm font-medium text-ink-primary focus:outline-none cursor-pointer"
                   >
-                    <option value="Bengaluru">Bengaluru</option>
-                    <option value="Pune">Pune</option>
-                    <option value="Hyderabad">Hyderabad</option>
-                    <option value="Delhi-NCR">Delhi-NCR</option>
-                    <option value="Mumbai">Mumbai</option>
-                    <option value="All">All Cities</option>
+                    <option value="Mumbai">Mumbai (Andheri Focus)</option>
+                    <option value="All">All Localities</option>
                   </select>
                 </div>
               </div>

@@ -131,6 +131,17 @@ const pointSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const roomReviewSchema = new mongoose.Schema(
+  {
+    seeker: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    rating: { type: Number, required: true, min: 1, max: 5 },
+    feedback: { type: String, trim: true, maxlength: 1000, default: '' },
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const roomListingSchema = new mongoose.Schema(
   {
     owner: {
@@ -154,13 +165,13 @@ const roomListingSchema = new mongoose.Schema(
       type: String,
       required: [true, 'City is required'],
       trim: true,
-      default: 'Bengaluru',
+      default: 'Mumbai',
     },
     state: {
       type: String,
       required: [true, 'State is required'],
       trim: true,
-      default: 'Karnataka',
+      default: 'Maharashtra',
     },
     pinCode: {
       type: String,
@@ -168,9 +179,27 @@ const roomListingSchema = new mongoose.Schema(
       trim: true,
       match: [/^[0-9]{6}$/, 'Postal code must be a 6-digit number'],
     },
+    exactAddress: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    googleMapsUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    isAddressPrivate: {
+      type: Boolean,
+      default: true,
+    },
+    isDemo: {
+      type: Boolean,
+      default: false,
+    },
     location: {
       type: pointSchema,
-      default: () => ({ type: 'Point', coordinates: [77.5946, 12.9716] }),
+      default: () => ({ type: 'Point', coordinates: [72.8697, 19.1136] }), // Andheri, Mumbai [lng, lat]
     },
     rent: {
       type: Number,
@@ -231,6 +260,7 @@ const roomListingSchema = new mongoose.Schema(
       required: [true, 'Living conditions are required'],
       default: () => ({}),
     },
+    reviews: { type: [roomReviewSchema], default: [] },
     status: {
       type: String,
       required: [true, 'Listing status is required'],

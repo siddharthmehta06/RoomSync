@@ -105,13 +105,13 @@ export const MatchesPage = () => {
   // Profile incomplete view (needs onboarding)
   if (!loading && errorCode === 'PROFILE_INCOMPLETE') {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center animate-fadeIn">
         <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto mb-6 shadow-sm border border-amber-200">
           <Sliders className="w-8 h-8" />
         </div>
-        <h1 className="text-2xl font-bold text-ink-primary mb-3">Complete your 22-Factor Profile</h1>
-        <p className="text-sm text-ink-secondary max-w-md mx-auto mb-8">
-          To calculate authentic compatibility scores and TOPSIS property rankings, tell us your sleep hours, diet rules, cleanliness standards, and guest policies.
+        <h1 className="text-2xl font-bold text-ink-primary mb-3">Please complete all 22 preference factors to calculate your compatibility score.</h1>
+        <p className="text-sm text-ink-secondary max-w-lg mx-auto mb-8 leading-relaxed">
+          {errorMessage || 'To calculate authentic compatibility scores without arbitrary assumptions, RoomSync requires your explicit inputs across all 22 circadian, hygiene, kitchen, and boundary parameters.'}
         </p>
         <Button
           variant="primary"
@@ -119,7 +119,7 @@ export const MatchesPage = () => {
           icon={SlidersHorizontal}
           onClick={() => navigate('/onboarding')}
         >
-          Start 22-Factor Questionnaire
+          Complete 22-Factor Questionnaire
         </Button>
       </div>
     );

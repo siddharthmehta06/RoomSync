@@ -1,14 +1,29 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '../../utils/cn';
-import { Sparkles, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Sparkles, AlertTriangle, CheckCircle2, SlidersHorizontal } from 'lucide-react';
 
 export const CompatibilityBadge = ({
-  score = 0,
+  score = null,
   showLabel = true,
   size = 'md',
   className,
+  clickable = true,
 }) => {
-  const percentage = Math.round(score);
+  const navigate = useNavigate();
+
+  const sizeStyles = {
+    sm: 'text-xs px-2 py-0.5 gap-1',
+    md: 'text-xs px-2.5 py-1 gap-1.5',
+    lg: 'text-sm px-3.5 py-1.5 gap-2',
+  };
+
+  // If score is null or undefined, do not render a badge on general room cards
+  if (score === null || score === undefined || isNaN(Number(score))) {
+    return null;
+  }
+
+  const percentage = Math.round(Number(score));
 
   let tier = {
     bg: 'bg-brand-50 text-brand-800 border-brand-200/80',
@@ -34,12 +49,6 @@ export const CompatibilityBadge = ({
   }
 
   const Icon = tier.icon;
-
-  const sizeStyles = {
-    sm: 'text-xs px-2 py-0.5 gap-1',
-    md: 'text-xs px-2.5 py-1 gap-1.5',
-    lg: 'text-sm px-3.5 py-1.5 gap-2',
-  };
 
   return (
     <div

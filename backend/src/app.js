@@ -14,6 +14,7 @@ import savedRoomRoutes from './routes/savedRoomRoutes.js';
 import matchRoutes from './routes/matchRoutes.js';
 import conversationRoutes from './routes/conversationRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
+import visitRoutes from './routes/visitRoutes.js';
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use('/api/saved-rooms', savedRoomRoutes);
 app.use('/api/matches', matchRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/visits', visitRoutes);
 
 // Fallback error middlewares
 app.use(notFound);

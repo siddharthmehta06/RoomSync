@@ -13,7 +13,10 @@ import {
   XCircle,
   ArrowRight,
   RefreshCw,
-  Home
+  Home,
+  Calendar,
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -23,7 +26,8 @@ import {
   reserveRoomListing, 
   fetchMyBookings, 
   cancelBookingApi, 
-  fetchRoomById 
+  fetchRoomById,
+  fetchMyVisitsApi
 } from '../services/api';
 
 export const BookingsPage = () => {
@@ -36,6 +40,8 @@ export const BookingsPage = () => {
   const [loadingRoom, setLoadingRoom] = useState(false);
   const [myBookings, setMyBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [myVisits, setMyVisits] = useState([]);
+  const [loadingVisits, setLoadingVisits] = useState(true);
   const [isReserving, setIsReserving] = useState(false);
   const [cancellingId, setCancellingId] = useState(null);
   const [conflictError, setConflictError] = useState(null);
@@ -58,17 +64,17 @@ export const BookingsPage = () => {
     }
   }, [roomId]);
 
-  // Load user's bookings if authenticated
-  const loadBookings = () => {
+  // Load user's bookings and visits if authenticated
+  const loadBookingsAndVisits = () => {
     if (!isAuthenticated) {
       setLoadingBookings(false);
+      setLoadingVisits(false);
       return;
     }
     setLoadingBookings(true);
     fetchMyBookings()
       .then((data) => {
         setMyBookings(data || []);
-        // Check if there's an active reservation for targetRoom or first active one
         const active = data.find((b) => ['pending', 'confirmed'].includes(b.status));
         setActiveReservation(active || null);
         setLoadingBookings(false);
@@ -77,10 +83,21 @@ export const BookingsPage = () => {
         console.warn('Could not fetch bookings:', err.message);
         setLoadingBookings(false);
       });
+
+    setLoadingVisits(true);
+    fetchMyVisitsApi('seeker')
+      .then((data) => {
+        setMyVisits(data || []);
+        setLoadingVisits(false);
+      })
+      .catch((err) => {
+        console.warn('Could not fetch visits:', err.message);
+        setLoadingVisits(false);
+      });
   };
 
   useEffect(() => {
-    loadBookings();
+    loadBookingsAndVisits();
   }, [isAuthenticated]);
 
   // Handle Atomic Reservation
@@ -110,7 +127,7 @@ export const BookingsPage = () => {
 
       setSuccessMessage('Room reserved successfully! A 15-minute hold lock has been placed to prevent double-booking.');
       setActiveReservation(result);
-      loadBookings();
+      loadBookingsAndVisits();
     } catch (err) {
       if (err.code === 'ROOM_ALREADY_RESERVED' || err.code === 'DUPLICATE_ACTIVE_BOOKING') {
         setConflictError(
@@ -139,7 +156,7 @@ export const BookingsPage = () => {
       await cancelBookingApi(bookingId);
       setSuccessMessage('Reservation cancelled and room availability lock has been released.');
       setActiveReservation(null);
-      loadBookings();
+      loadBookingsAndVisits();
     } catch (err) {
       alert(`Could not cancel booking: ${err.message}`);
     } finally {
@@ -151,7 +168,7 @@ export const BookingsPage = () => {
   const seekerName = user?.fullName || 'Incoming Room Seeker';
   const displayRent = targetRoom?.rent ? targetRoom.rent.toLocaleString('en-IN') : '18,500';
   const displayDeposit = targetRoom?.deposit ? targetRoom.deposit.toLocaleString('en-IN') : '50,000';
-  const displayLocality = targetRoom?.locality ? `${targetRoom.locality}, ${targetRoom.city || 'Bengaluru'}` : 'Koramangala 4th Block, Bengaluru';
+  const displayLocality = targetRoom?.locality ? `${targetRoom.locality}, ${targetRoom.city || 'Mumbai'}` : 'Lokhandwala, Mumbai';
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -169,7 +186,7 @@ export const BookingsPage = () => {
 
         <div className="flex items-center gap-2">
           {isAuthenticated && (
-            <Button variant="ghost" size="sm" icon={RefreshCw} onClick={loadBookings}>
+            <Button variant="ghost" size="sm" icon={RefreshCw} onClick={loadBookingsAndVisits}>
               Refresh Status
             </Button>
           )}
@@ -295,6 +312,92 @@ export const BookingsPage = () => {
             </div>
 
           </Card>
+
+          {/* User's Scheduled Room Visits */}
+          {isAuthenticated && (
+            <Card className="p-6 bg-white shadow-subtle border border-black/[0.08] space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <h3 className="font-semibold text-sm text-ink-primary flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-brand-600" />
+                  Your Scheduled Room Visits ({myVisits.length})
+                </h3>
+                <span className="text-[11px] text-ink-tertiary">
+                  Exact Google Maps location unlocks when host accepts
+                </span>
+              </div>
+
+              {loadingVisits ? (
+                <p className="text-xs text-ink-secondary py-2">Loading your visit requests...</p>
+              ) : myVisits.length === 0 ? (
+                <div className="p-4 rounded-xl bg-surface-50 border border-surface-200 text-xs text-ink-secondary text-center">
+                  No visit requests scheduled yet. Find a room you like and click &quot;Request a Visit&quot; to coordinate an in-person walkthrough.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {myVisits.map((v) => {
+                    const statusVariant = v.status === 'Accepted' ? 'emerald' : v.status === 'Pending' ? 'amber' : 'neutral';
+                    const roomId = v.room?._id || v.room?.id || v.room;
+                    return (
+                      <div key={v.id || v._id} className="p-4 rounded-xl bg-surface-50 border border-surface-200 space-y-2 text-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm text-ink-primary">{v.room?.title || 'Room Listing'}</span>
+                              <Badge variant={statusVariant} size="sm">
+                                {v.status}
+                              </Badge>
+                            </div>
+                            <p className="text-ink-secondary text-[11px] mt-0.5">
+                              Host: {v.owner?.fullName || 'Property Host'} {v.owner?.phone ? `· Phone: ${v.owner.phone}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-medium text-ink-primary">
+                            <span className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-surface-200">
+                              <Calendar className="w-3.5 h-3.5 text-brand-600" />
+                              {v.visitDate}
+                            </span>
+                            <span className="flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-surface-200">
+                              <Clock className="w-3.5 h-3.5 text-brand-600" />
+                              {v.visitTime}
+                            </span>
+                          </div>
+                        </div>
+
+                        {v.message && (
+                          <p className="text-[11px] text-ink-secondary italic bg-white/70 p-2 rounded-lg border border-surface-200/50">
+                            &quot;{v.message}&quot;
+                          </p>
+                        )}
+
+                        {v.status === 'Accepted' ? (
+                          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-t border-surface-200/60 text-emerald-800">
+                            <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>Visit Accepted! Exact address & Google Maps link are unlocked.</span>
+                            </div>
+                            <Link to={`/rooms/${roomId}`}>
+                              <Button variant="secondary" size="sm" icon={ExternalLink}>
+                                View Unlocked Room & Map
+                              </Button>
+                            </Link>
+                          </div>
+                        ) : v.status === 'Pending' ? (
+                          <div className="pt-1 text-[11px] text-amber-800 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                            <span>Awaiting host confirmation. You will receive access to the exact address once accepted.</span>
+                          </div>
+                        ) : (
+                          <div className="pt-1 text-[11px] text-ink-tertiary">
+                            <span>This visit request was declined or cancelled.</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* User's Existing Bookings List */}
           {isAuthenticated && myBookings.length > 0 && (

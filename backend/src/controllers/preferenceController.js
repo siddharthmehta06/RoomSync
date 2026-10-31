@@ -1,5 +1,6 @@
 import PreferenceProfile from '../models/PreferenceProfile.js';
 import User from '../models/User.js';
+import { checkFactorsCompletion } from '../utils/factorValidation.js';
 
 /**
  * @desc    Get current user's 22-factor preference profile
@@ -24,9 +25,12 @@ export async function getPreferences(req, res, next) {
       });
     }
 
+    const completion = checkFactorsCompletion(profile);
+
     res.status(200).json({
       success: true,
       data: profile,
+      completion,
     });
   } catch (error) {
     next(error);
@@ -75,15 +79,19 @@ export async function savePreferences(req, res, next) {
       });
     }
 
-    // Mark onboarding as completed on User record
+    // Check completion of all 22 compatibility factors
+    const completion = checkFactorsCompletion(profile);
+
+    // Only mark onboarding as completed if ALL 22 factors are valid
     await User.findByIdAndUpdate(req.user._id, {
-      hasCompletedOnboarding: true,
+      hasCompletedOnboarding: completion.isComplete,
     });
 
     res.status(200).json({
       success: true,
       message: 'Preferences saved successfully.',
       data: profile,
+      completion,
     });
   } catch (error) {
     next(error);

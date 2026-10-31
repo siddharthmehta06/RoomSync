@@ -11,7 +11,8 @@ import {
   ChevronDown, 
   PlusCircle, 
   ShieldCheck,
-  Building
+  Building,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -154,6 +155,14 @@ export const Navbar = () => {
                         <span>My Profile</span>
                       </Link>
                       <Link
+                        to="/onboarding"
+                        onClick={() => setDropdownOpen(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 hover:bg-surface-50 hover:text-ink-primary transition-colors"
+                      >
+                        <SlidersHorizontal className="w-4 h-4 text-ink-tertiary" />
+                        <span>Edit 22 Preferences</span>
+                      </Link>
+                      <Link
                         to="/saved"
                         onClick={() => setDropdownOpen(false)}
                         className="flex items-center gap-2.5 px-4 py-2 hover:bg-surface-50 hover:text-ink-primary transition-colors"
@@ -270,6 +279,14 @@ export const Navbar = () => {
                 className="block px-3 py-2 rounded-xl text-sm text-ink-primary hover:bg-surface-100"
               >
                 My Profile
+              </Link>
+              <Link
+                to="/onboarding"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-xl text-sm text-ink-primary hover:bg-surface-100 flex items-center gap-2"
+              >
+                <SlidersHorizontal className="w-4 h-4 text-ink-tertiary" />
+                <span>Edit 22 Preferences</span>
               </Link>
               <button
                 onClick={handleLogout}

@@ -13,6 +13,7 @@ import { getCompatibilityPreview } from '../controllers/matchController.js';
 import { protect, authorize, optionalAuth } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { handleListingImageUpload } from '../middleware/uploadMiddleware.js';
+import { upsertRoomReview } from '../controllers/roomReviewController.js';
 
 const router = express.Router();
 
@@ -159,6 +160,15 @@ router.get(
   getMyListings
 );
 router.get('/:id', optionalAuth, getRoomById);
+router.post(
+  '/:id/reviews',
+  protect,
+  authorize('seeker'),
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be from 1 to 5.'),
+  body('feedback').optional().isString().trim().isLength({ max: 1000 }).withMessage('Feedback cannot exceed 1000 characters.'),
+  validateRequest,
+  upsertRoomReview
+);
 router.post(
   '/',
   protect,

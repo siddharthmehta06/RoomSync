@@ -157,6 +157,7 @@ export async function fetchRooms(params = {}) {
   try {
     const query = new URLSearchParams();
     if (params.city && params.city !== 'All') query.set('city', params.city);
+    if (params.locality && params.locality !== 'All') query.set('locality', params.locality);
     if (params.maxRent) query.set('maxRent', params.maxRent);
     if (params.furnishing && params.furnishing !== 'All') {
       query.set('furnishing', params.furnishing);
@@ -169,12 +170,9 @@ export async function fetchRooms(params = {}) {
         return json.data.map((r) => ({
           ...r,
           id: r.id || r._id,
-          compatibilityScore: r.compatibilityScore || 89,
-          rankingScore: r.rankingScore || 8.5,
-          strengths: r.strengths || [
-            'Non-smoking preference match',
-            'Quiet hours aligned',
-          ],
+          compatibilityScore: typeof r.compatibilityScore === 'number' ? r.compatibilityScore : null,
+          rankingScore: typeof r.rankingScore === 'number' ? r.rankingScore : null,
+          strengths: r.strengths || [],
           mismatches: r.mismatches || [],
         }));
       }
@@ -197,15 +195,20 @@ export async function fetchRooms(params = {}) {
     results = results.filter((r) => r.rent <= Number(params.maxRent));
   }
 
-  return results;
+  return results.map((r) => ({
+    ...r,
+    compatibilityScore: typeof r.compatibilityScore === 'number' ? r.compatibilityScore : null,
+  }));
 }
 
 /**
  * Fetch single room by ID
  */
-export async function fetchRoomById(id) {
+export async function fetchRoomById(id, customToken) {
   try {
-    const res = await fetch(`${API_BASE_URL}/rooms/${id}`);
+    const res = await fetch(`${API_BASE_URL}/rooms/${id}`, {
+      headers: getAuthHeaders(customToken),
+    });
     if (res.ok) {
       const json = await res.json();
       if (json.data) {
@@ -213,14 +216,11 @@ export async function fetchRoomById(id) {
         return {
           ...r,
           id: r.id || r._id,
-          compatibilityScore: r.compatibilityScore || 91,
-          rankingScore: r.rankingScore || 8.8,
-          strengths: r.strengths || [
-            'Similar WFH schedule',
-            'Quiet hours aligned after 11 PM',
-            'Non-smoking match',
-          ],
+          compatibilityScore: typeof r.compatibilityScore === 'number' ? r.compatibilityScore : null,
+          rankingScore: typeof r.rankingScore === 'number' ? r.rankingScore : null,
+          strengths: r.strengths || [],
           mismatches: r.mismatches || [],
+          reviewSummary: r.reviewSummary || { ratingAverage: null, ratingCount: 0, reviews: [], myReview: null },
           owner: r.owner
             ? {
                 id: r.owner._id || r.owner.id,
@@ -249,6 +249,19 @@ export async function fetchRoomById(id) {
     throw new Error(`Room with ID "${id}" was not found.`);
   }
   return room;
+}
+
+export async function submitRoomReview(roomId, review, customToken) {
+  const res = await fetch(`${API_BASE_URL}/rooms/${roomId}/reviews`, {
+    method: 'POST',
+    headers: getAuthHeaders(customToken),
+    body: JSON.stringify(review),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Could not submit your review.');
+  }
+  return data.data;
 }
 
 /**
@@ -372,7 +385,11 @@ export async function fetchCompatibilityPreview(roomId, customToken) {
   const data = await res.json();
   if (!res.ok) {
     const error = new Error(data.error?.message || data.message || 'Failed to fetch compatibility preview');
-    error.code = data.error?.code;
+    error.code = data.error?.code || 'PREVIEW_ERROR';
+    error.completedCount = data.error?.completedCount;
+    error.totalFactors = data.error?.totalFactors;
+    error.progressText = data.error?.progressText;
+    error.missingFactors = data.error?.missingFactors;
     throw error;
   }
 
@@ -742,6 +759,106 @@ export async function confirmBookingApi(bookingId, customToken) {
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error?.message || data.message || 'Failed to confirm booking.');
+  }
+
+  return data.data;
+}
+
+// ==========================================
+// Password Reset API
+// ==========================================
+
+export async function forgotPasswordApi(email) {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to request password reset.');
+  }
+
+  return data;
+}
+
+export async function resetPasswordApi(token, password) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password/${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Password reset failed.');
+  }
+
+  if (data.data?.token) {
+    setAuthToken(data.data.token);
+    setAuthUser(data.data.user);
+  }
+
+  return data.data;
+}
+
+// ==========================================
+// Property Visit Requests API
+// ==========================================
+
+export async function createVisitRequestApi(visitData, customToken) {
+  const token = customToken || getAuthToken();
+  if (!token) {
+    throw new Error('Please sign in to schedule an in-person property visit.');
+  }
+
+  const res = await fetch(`${API_BASE_URL}/visits`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify(visitData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const errorMsg = data.error?.message || data.message || 'Failed to submit visit request.';
+    const error = new Error(errorMsg);
+    error.code = data.error?.code || 'VISIT_REQUEST_ERROR';
+    throw error;
+  }
+
+  return data.data;
+}
+
+export async function fetchMyVisitsApi(role, customToken) {
+  const token = customToken || getAuthToken();
+  if (!token) return [];
+
+  const query = role ? `?role=${role}` : '';
+  const res = await fetch(`${API_BASE_URL}/visits/my${query}`, {
+    headers: getAuthHeaders(token),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error?.message || data.message || 'Failed to fetch visit requests.');
+  }
+
+  const data = await res.json();
+  return data.data || [];
+}
+
+export async function updateVisitStatusApi(visitId, status, ownerResponseNote, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/visits/${visitId}/status`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ status, ownerResponseNote }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to update visit status.');
   }
 
   return data.data;

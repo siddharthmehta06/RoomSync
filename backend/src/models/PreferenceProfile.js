@@ -58,6 +58,12 @@ const hardConstraintsSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    stayDuration: {
+      type: Number,
+      default: 6,
+      min: [1, 'Stay duration must be at least 1 month'],
+      max: [36, 'Stay duration cannot exceed 36 months'],
+    },
   },
   { _id: false }
 );

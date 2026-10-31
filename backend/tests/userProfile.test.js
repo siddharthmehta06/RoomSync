@@ -64,7 +64,7 @@ describe('RoomSync User Profile API (/api/users/profile)', () => {
       expect(data.email).toBe('aarav.patel@example.com');
       expect(data.phone).toBe('9876543210');
       expect(data.role).toBe('seeker');
-      expect(data.city).toBe('Bengaluru');
+      expect(data.city).toBe('Mumbai');
       expect(data.isVerified).toBe(false);
 
       // Sensitive fields must NOT be returned

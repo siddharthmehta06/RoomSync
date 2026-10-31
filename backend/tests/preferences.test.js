@@ -85,6 +85,8 @@ describe('RoomSync Preference Profile API (/api/preferences)', () => {
         alcoholPolicy: 'Teetotaler',
         petPolicy: 'Strictly No Pets',
         maxCommuteMins: 45,
+        latestMoveIn: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        stayDuration: 11,
       },
       flexiblePreferences: {
         sleepSchedule: 23.5,
@@ -96,6 +98,7 @@ describe('RoomSync Preference Profile API (/api/preferences)', () => {
         socialPreference: 'Balanced',
         workSchedule: 'Regular Day',
         wfhDays: 2,
+        studyHabits: 'Moderate Study',
         cookingHabit: 'Daily',
         foodSharing: 'Separate Groceries',
         personalSpace: 'High',
