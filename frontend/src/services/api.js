@@ -165,7 +165,7 @@ export async function fetchRooms(params = {}) {
     const res = await fetch(`${API_BASE_URL}/rooms?${query.toString()}`);
     if (res.ok) {
       const json = await res.json();
-      if (Array.isArray(json.data) && json.data.length > 0) {
+      if (Array.isArray(json.data)) {
         return json.data.map((r) => ({
           ...r,
           id: r.id || r._id,
@@ -359,8 +359,30 @@ export async function fetchMyListings(customToken) {
 }
 
 // ==========================================
+// Explainable Matching API
+// ==========================================
+
+export async function fetchCompatibilityPreview(roomId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/rooms/${roomId}/compatibility-preview`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.error?.message || data.message || 'Failed to fetch compatibility preview');
+    error.code = data.error?.code;
+    throw error;
+  }
+
+  return data.data;
+}
+
+// ==========================================
 // Real-Time Chat & Messaging API
 // ==========================================
+
 
 /**
  * Fetch all conversations for the authenticated user
