@@ -983,6 +983,11 @@ export async function resetPasswordWithOtpApi(tempToken, password) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ tempToken, password }),
+export async function resetPasswordApi(token, newPassword) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword }),
   });
 
   const data = await res.json();
@@ -990,12 +995,38 @@ export async function resetPasswordWithOtpApi(tempToken, password) {
     throw new Error(data.error?.message || data.message || 'Password reset failed.');
   }
 
-  if (data.data?.token) {
-    setAuthToken(data.data.token);
-    setAuthUser(data.data.user);
+  return data;
+}
+
+export async function verifyEmailApi(token) {
+  const res = await fetch(`${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.error?.message || data.message || 'Email verification failed.');
+    error.code = data.error?.code;
+    throw error;
   }
 
-  return data.data;
+  return data;
+}
+
+export async function resendVerificationApi(email) {
+  const res = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to resend verification link.');
+  }
+
+  return data;
 }
 
 // ==========================================

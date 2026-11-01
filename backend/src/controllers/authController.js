@@ -1,7 +1,12 @@
 import crypto from 'crypto';
 import User from '../models/User.js';
+import PasswordResetToken from '../models/PasswordResetToken.js';
+import EmailVerificationToken from '../models/EmailVerificationToken.js';
 import { generateToken } from '../utils/generateToken.js';
-import { sendEmail } from '../utils/sendEmail.js';
+import {
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from '../services/emailService.js';
 
 /**
  * @desc    Register a new user account
@@ -32,7 +37,7 @@ export async function register(req, res, next) {
       });
     }
 
-    // Create user in database (pre-save hook hashes password)
+    // Create user in database (pre-save hook hashes password; isVerified defaults to false)
     const user = await User.create({
       fullName: fullName.trim(),
       email: normalizedEmail,
@@ -42,6 +47,37 @@ export async function register(req, res, next) {
     });
 
     const token = generateToken(user);
+
+    // Generate cryptographic email verification token and dispatch verification email
+    try {
+      const verificationRawToken = crypto.randomBytes(32).toString('hex');
+      const hashedVerificationToken = crypto
+        .createHash('sha256')
+        .update(verificationRawToken)
+        .digest('hex');
+
+      await EmailVerificationToken.create({
+        user: user._id,
+        hashedToken: hashedVerificationToken,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours validity
+        isUsed: false,
+      });
+
+      // Dispatch verification email via Nodemailer Gmail SMTP
+      sendVerificationEmail({
+        to: user.email,
+        verificationToken: verificationRawToken,
+        userName: user.fullName,
+      }).catch((emailErr) => {
+        console.warn(
+          `[RoomSync Email Notice] Initial verification email notice for ${user.email}: ${emailErr.message}`
+        );
+      });
+    } catch (verifErr) {
+      console.warn(
+        `[RoomSync Notice] Verification token generation notice: ${verifErr.message}`
+      );
+    }
 
     res.status(201).json({
       success: true,
@@ -137,8 +173,7 @@ export async function forgotPassword(req, res, next) {
       '+passwordResetCooldown +passwordResetOTP +passwordResetOTPExpires'
     );
 
-    // Consistent security practice: Always return 200 generic response
-    // regardless of whether the account exists, preventing email enumeration.
+    // If user does not exist, return generic success immediately
     if (!user) {
       const payload = {
         success: true,
@@ -201,8 +236,9 @@ export async function forgotPassword(req, res, next) {
       </div>
     `;
 
+    // Send email via Gmail SMTP email service
     try {
-      const emailResult = await sendEmail({
+      await sendPasswordResetEmail({
         to: user.email,
         subject: `${otp} is your RoomSync Password Reset Code (Valid 5 mins)`,
         text: messageText,
@@ -242,6 +278,8 @@ export async function forgotPassword(req, res, next) {
         error: { code: 'EMAIL_SEND_FAILED', message: emailErr.message },
       });
     }
+
+    return res.status(200).json(genericResponse);
   } catch (error) {
     next(error);
   }
@@ -470,54 +508,110 @@ export async function resetPasswordWithOTP(req, res, next) {
  */
 export async function resetPassword(req, res, next) {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
+    const token = req.body?.token || req.params?.token;
+    const newPassword = req.body?.newPassword || req.body?.password;
 
-    if (!token) {
+    if (!token || typeof token !== 'string' || !token.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Password reset token is required.',
-        error: { code: 'TOKEN_REQUIRED', message: 'Password reset token is required.' },
+        message: 'This password reset link is invalid.',
+        error: { code: 'INVALID_TOKEN', message: 'This password reset link is invalid.' },
       });
     }
 
-    if (!password || typeof password !== 'string' || password.length < 6) {
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters.',
+        message: 'Password must be at least 6 characters.',
         error: {
           code: 'WEAK_PASSWORD',
-          message: 'New password must be at least 6 characters.',
-          details: [{ field: 'password', message: 'Password must be at least 6 characters' }],
+          message: 'Password must be at least 6 characters.',
+          details: [{ field: 'newPassword', message: 'Password must be at least 6 characters' }],
         },
       });
     }
 
-    // Hash the token from URL param with SHA-256 to compare with stored DB hash
+    // Compute SHA-256 hash of the supplied token for lookup
     const hashedToken = crypto
       .createHash('sha256')
-      .update(token)
+      .update(token.trim())
       .digest('hex');
 
-    // Find user by hashed token and ensure expiration is in the future
-    const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpire: { $gt: Date.now() },
-    });
+    // Check token existence in database
+    const existingToken = await PasswordResetToken.findOne({ hashedToken });
 
+    if (!existingToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'This password reset link is invalid.',
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'This password reset link is invalid.',
+        },
+      });
+    }
+
+    if (existingToken.isUsed) {
+      return res.status(400).json({
+        success: false,
+        message: 'This password reset link has already been used.',
+        error: {
+          code: 'TOKEN_ALREADY_USED',
+          message: 'This password reset link has already been used.',
+        },
+      });
+    }
+
+    if (new Date(existingToken.expiresAt) <= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'This password reset link has expired. Please request a new one.',
+        error: {
+          code: 'TOKEN_EXPIRED',
+          message: 'This password reset link has expired. Please request a new one.',
+        },
+      });
+    }
+
+    // Atomic single-use consumption: guarantees that concurrent duplicate requests fail
+    const consumedToken = await PasswordResetToken.findOneAndUpdate(
+      {
+        _id: existingToken._id,
+        isUsed: false,
+        expiresAt: { $gt: new Date() },
+      },
+      {
+        $set: { isUsed: true },
+      },
+      { new: false }
+    );
+
+    if (!consumedToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'This password reset link has already been used.',
+        error: {
+          code: 'TOKEN_ALREADY_USED',
+          message: 'This password reset link has already been used.',
+        },
+      });
+    }
+
+    // Retrieve the associated user
+    const user = await User.findById(consumedToken.user);
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Password reset token is invalid, expired, or has already been used.',
+        message: 'This password reset link is invalid.',
         error: {
-          code: 'INVALID_OR_EXPIRED_TOKEN',
-          message: 'Password reset token is invalid, expired, or has already been used.',
+          code: 'USER_NOT_FOUND',
+          message: 'This password reset link is invalid.',
         },
       });
     }
 
-    // Set new password (pre-save middleware handles bcrypt hashing)
-    user.password = password;
+    // Update password (pre-save middleware on User hashes the password with bcrypt)
+    user.password = newPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
     user.tempResetToken = undefined;
@@ -526,16 +620,191 @@ export async function resetPassword(req, res, next) {
     user.passwordResetOTPExpires = undefined;
     await user.save();
 
-    // Generate new JWT session token
-    const jwtToken = generateToken(user);
+    // Invalidate all remaining tokens for this user
+    await PasswordResetToken.updateMany(
+      { user: user._id, isUsed: false },
+      { $set: { isUsed: true } }
+    );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: 'Password reset successful. You are now logged in.',
+      message:
+        'Your password has been reset successfully. You can now log in using your new password.',
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Verify user email using secure verification token
+ * @route   POST /api/auth/verify-email
+ * @route   GET /api/auth/verify-email
+ * @access  Public
+ */
+export async function verifyEmail(req, res, next) {
+  try {
+    const rawToken = req.query?.token || req.body?.token;
+
+    if (!rawToken || typeof rawToken !== 'string' || !rawToken.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email verification token is missing or invalid.',
+        error: { code: 'INVALID_TOKEN', message: 'Email verification token is missing or invalid.' },
+      });
+    }
+
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(rawToken.trim())
+      .digest('hex');
+
+    const tokenRecord = await EmailVerificationToken.findOne({ hashedToken });
+
+    if (!tokenRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email verification link is invalid or has already been used.',
+        error: { code: 'INVALID_TOKEN', message: 'This email verification link is invalid or has already been used.' },
+      });
+    }
+
+    if (tokenRecord.isUsed) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email verification link has already been used.',
+        error: { code: 'TOKEN_ALREADY_USED', message: 'This email verification link has already been used.' },
+      });
+    }
+
+    if (new Date(tokenRecord.expiresAt) <= new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email verification link has expired. Please request a new one.',
+        error: { code: 'TOKEN_EXPIRED', message: 'This email verification link has expired. Please request a new one.' },
+      });
+    }
+
+    // Atomic consumption
+    const consumed = await EmailVerificationToken.findOneAndUpdate(
+      { _id: tokenRecord._id, isUsed: false, expiresAt: { $gt: new Date() } },
+      { $set: { isUsed: true } },
+      { new: false }
+    );
+
+    if (!consumed) {
+      return res.status(400).json({
+        success: false,
+        message: 'This email verification link has already been used.',
+        error: { code: 'TOKEN_ALREADY_USED', message: 'This email verification link has already been used.' },
+      });
+    }
+
+    const user = await User.findById(consumed.user);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'User account associated with this verification link was not found.',
+        error: { code: 'USER_NOT_FOUND', message: 'User account associated with this verification link was not found.' },
+      });
+    }
+
+    user.isVerified = true;
+    user.verificationMethod = user.verificationMethod || 'Work_Email';
+    await user.save();
+
+    // Invalidate all other verification tokens for this user
+    await EmailVerificationToken.updateMany(
+      { user: user._id, isUsed: false },
+      { $set: { isUsed: true } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Your email address has been successfully verified! You can now access all verified member privileges.',
       data: {
-        user,
-        token: jwtToken,
+        isVerified: true,
+        email: user.email,
+        fullName: user.fullName,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Resend email verification link
+ * @route   POST /api/auth/resend-verification
+ * @access  Public or Authenticated
+ */
+export async function resendVerification(req, res, next) {
+  try {
+    const email = req.body?.email || req.user?.email;
+    const normalizedEmail = email ? email.toLowerCase().trim() : '';
+
+    if (!normalizedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a valid email address.',
+        error: { code: 'EMAIL_REQUIRED', message: 'Please provide a valid email address.' },
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // Anti-enumeration: return generic response even if account is not registered
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists with this email address, a verification link has been sent.',
+      });
+    }
+
+    if (user.isVerified) {
+      return res.status(200).json({
+        success: true,
+        message: 'This email address is already verified. No action required.',
+        data: { isVerified: true },
+      });
+    }
+
+    // Invalidate prior verification tokens
+    await EmailVerificationToken.updateMany(
+      { user: user._id, isUsed: false },
+      { $set: { isUsed: true } }
+    );
+
+    const verificationRawToken = crypto.randomBytes(32).toString('hex');
+    const hashedVerificationToken = crypto
+      .createHash('sha256')
+      .update(verificationRawToken)
+      .digest('hex');
+
+    await EmailVerificationToken.create({
+      user: user._id,
+      hashedToken: hashedVerificationToken,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      isUsed: false,
+    });
+
+    try {
+      await sendVerificationEmail({
+        to: user.email,
+        verificationToken: verificationRawToken,
+        userName: user.fullName,
+      });
+    } catch (emailErr) {
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to send verification email. Please check SMTP configuration.',
+        error: { code: 'EMAIL_DELIVERY_FAILED', message: emailErr.message },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'A verification link has been dispatched to your email address.',
     });
   } catch (error) {
     next(error);

@@ -53,6 +53,18 @@ export const ForgotPasswordPage = () => {
     return () => clearInterval(timer);
   }, [countdown]);
 
+  const validateEmail = (val) => {
+    const trimmed = val.trim();
+    if (!trimmed) {
+      return 'Email address cannot be empty. Please enter your email.';
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      return 'Please provide a valid email format (e.g., name@domain.com).';
+    }
+    return null;
+  };
+
   // Step 1: Request OTP
   const handleRequestOtp = async (e) => {
     e?.preventDefault();
@@ -64,6 +76,8 @@ export const ForgotPasswordPage = () => {
       setErrorMessage('Please enter a valid registered email address.');
       return;
     }
+
+    const cleanEmail = email.trim().toLowerCase();
 
     try {
       setLoading(true);
@@ -77,7 +91,10 @@ export const ForgotPasswordPage = () => {
         setDevSimulatedOtp(res.devMode.simulatedOtp);
       }
     } catch (err) {
-      setErrorMessage(err.message || 'Unable to process your request. Please try again.');
+      // In case of network errors or server exceptions
+      setErrorMessage(
+        err.message || 'Unable to process your request at this time. Please try again later.'
+      );
     } finally {
       setLoading(false);
     }
@@ -240,6 +257,7 @@ export const ForgotPasswordPage = () => {
               variant="primary"
               size="lg"
               className="w-full justify-center"
+              icon={loading ? Loader2 : null}
               disabled={loading}
               icon={loading ? Loader2 : ArrowRight}
             >
@@ -253,6 +271,7 @@ export const ForgotPasswordPage = () => {
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Sign In</span>
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Login
               </Link>
             </div>
           </form>
