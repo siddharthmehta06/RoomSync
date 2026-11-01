@@ -19,12 +19,31 @@ const bookingSchema = new mongoose.Schema(
     },
     bookingType: {
       type: String,
-      required: [true, 'Booking type is required'],
       enum: {
-        values: ['visit', 'tenancy_reservation'],
+        values: ['visit', 'tenancy_reservation', 'booking_request'],
         message: '{VALUE} is not a valid booking type',
       },
-      default: 'tenancy_reservation',
+      default: 'booking_request',
+    },
+    moveInDate: {
+      type: Date,
+      default: null,
+    },
+    stayDuration: {
+      type: Number,
+      default: 6,
+      min: [1, 'Duration must be at least 1 month'],
+    },
+    occupantsCount: {
+      type: Number,
+      default: 1,
+      min: [1, 'Number of occupants must be at least 1'],
+    },
+    message: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Message cannot exceed 1000 characters'],
+      default: '',
     },
     scheduledDate: {
       type: Date,
@@ -34,10 +53,20 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Booking status is required'],
       enum: {
-        values: ['pending', 'confirmed', 'completed', 'cancelled', 'rejected'],
+        values: ['pending', 'accepted', 'confirmed', 'completed', 'cancelled', 'rejected'],
         message: '{VALUE} is not a valid booking status',
       },
       default: 'pending',
+    },
+    rejectionReason: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    agreement: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MutualAgreement',
+      default: null,
     },
     tokenAmount: {
       type: Number,
@@ -73,15 +102,12 @@ const bookingSchema = new mongoose.Schema(
 );
 
 // Concurrency & Synchronization:
-// Unique partial compound index ensuring that for any given room,
-// only ONE active reservation ('pending' or 'confirmed') can exist at any given time.
-// Concurrent inserts will collide on this index at the database storage engine level,
-// generating an E11000 duplicate key error and preventing duplicate bookings.
+// Only one active booking request / tenancy per room in pending/accepted/confirmed state
 bookingSchema.index(
   { room: 1 },
   {
     unique: true,
-    partialFilterExpression: { status: { $in: ['pending', 'confirmed'] } },
+    partialFilterExpression: { status: { $in: ['pending', 'accepted', 'confirmed'] } },
   }
 );
 

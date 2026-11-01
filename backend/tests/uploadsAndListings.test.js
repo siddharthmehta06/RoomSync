@@ -52,6 +52,7 @@ describe('RoomSync Image Uploads & Listing Creation API', () => {
     });
     ownerToken = ownerRes.body.data.token;
     ownerId = ownerRes.body.data.user.id;
+    await User.findByIdAndUpdate(ownerId, { ownerVerificationStatus: 'Verified', isVerified: true });
 
     // Register seeker
     const seekerRes = await request(app).post('/api/auth/register').send({
@@ -72,6 +73,7 @@ describe('RoomSync Image Uploads & Listing Creation API', () => {
       role: 'owner',
     });
     otherOwnerToken = otherOwnerRes.body.data.token;
+    await User.findByIdAndUpdate(otherOwnerRes.body.data.user.id, { ownerVerificationStatus: 'Verified', isVerified: true });
   });
 
   describe('POST /api/rooms/upload-images', () => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { MapPin, SlidersHorizontal, Search, CheckCircle2, RotateCcw } from 'lucide-react';
+import { MapPin, Sparkles, SlidersHorizontal, Search, CheckCircle2, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -28,7 +28,7 @@ export const ExplorePage = () => {
       if (isMounted) {
         let filtered = data;
         if (furnishing !== 'All') {
-          filtered = filtered.filter((r) => r.furnishing.toLowerCase().includes(furnishing.toLowerCase()));
+          filtered = filtered.filter((r) => r.furnishing && r.furnishing.toLowerCase().includes(furnishing.toLowerCase()));
         }
         setRooms(filtered);
         setLoading(false);
@@ -63,6 +63,12 @@ export const ExplorePage = () => {
             Browse realistic sample residential rooms in Andheri East & West with verified living conditions and lifestyle compatibility.
           </p>
         </div>
+
+        <Link to="/matches">
+          <Button variant="primary" size="md" icon={Sparkles} className="bg-teal-800 hover:bg-teal-900 text-white shrink-0 shadow-xs">
+            Find Compatible Rooms
+          </Button>
+        </Link>
       </div>
 
       {/* Filter Bar */}

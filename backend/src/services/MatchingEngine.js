@@ -120,8 +120,8 @@ export function evaluateHardConstraints(seeker, room) {
     const seekerDiet = hc.dietaryRule || 'Any';
     if (!roomFood) {
       reasons.push('MISSING_FOOD_RULE');
-    } else if (seekerDiet === 'Pure-Veg' || seekerDiet === 'Veg-Only Flat') {
-      if (roomFood !== 'Pure Vegetarian') {
+    } else if (roomFood !== 'Flexible' && seekerDiet !== 'Flexible' && seekerDiet !== 'Any') {
+      if ((seekerDiet === 'Pure-Veg' || seekerDiet === 'Veg-Only Flat') && roomFood !== 'Pure Vegetarian') {
         reasons.push('DIETARY_RULE_MISMATCH');
       }
     }
@@ -131,7 +131,7 @@ export function evaluateHardConstraints(seeker, room) {
     const seekerSmoking = hc.smokingPolicy || 'Flexible';
     if (!roomSmoking) {
       reasons.push('MISSING_SMOKING_RULE');
-    } else {
+    } else if (roomSmoking !== 'Flexible' && seekerSmoking !== 'Flexible') {
       if (seekerSmoking === 'Strictly Non-Smoking' && roomSmoking !== 'Strictly Non-Smoking') {
         reasons.push('SMOKING_POLICY_MISMATCH');
       } else if (seekerSmoking === 'Balcony Only' && roomSmoking === 'Allowed') {
@@ -144,7 +144,7 @@ export function evaluateHardConstraints(seeker, room) {
     const seekerAlcohol = hc.alcoholPolicy || 'Flexible';
     if (!roomAlcohol) {
       reasons.push('MISSING_ALCOHOL_RULE');
-    } else {
+    } else if (roomAlcohol !== 'Flexible' && seekerAlcohol !== 'Flexible') {
       if (seekerAlcohol === 'Teetotaler' && roomAlcohol !== 'Teetotaler') {
         reasons.push('ALCOHOL_POLICY_MISMATCH');
       } else if (seekerAlcohol === 'Moderate' && roomAlcohol === 'Allowed') {
@@ -157,7 +157,7 @@ export function evaluateHardConstraints(seeker, room) {
     const seekerPets = hc.petPolicy || 'Flexible';
     if (roomPets === undefined || roomPets === null) {
       reasons.push('MISSING_PET_POLICY');
-    } else {
+    } else if (roomPets !== 'Flexible' && seekerPets !== 'Flexible') {
       const roomPetsStr = String(roomPets).toLowerCase();
       if (seekerPets === 'Strictly No Pets') {
         const petPositive = /cat|dog|has pet|pet-friendly|pets welcome|pets allowed/i.test(roomPetsStr);
@@ -211,6 +211,18 @@ export function evaluateHardConstraints(seeker, room) {
  * @returns {number} Normalized score 0.0 to 1.0
  */
 export function scoreCategoricalSynergy(seekerVal, roomVal) {
+  if (
+    seekerVal === 'Flexible' ||
+    roomVal === 'Flexible' ||
+    seekerVal === null ||
+    roomVal === null ||
+    seekerVal === undefined ||
+    roomVal === undefined ||
+    String(seekerVal).trim().toLowerCase() === 'flexible' ||
+    String(roomVal).trim().toLowerCase() === 'flexible'
+  ) {
+    return 1.0; // Flexible means accepting any compatible answer, full synergy
+  }
   if (!seekerVal || !roomVal) return 0.5; // neutral fallback if missing
   const s = String(seekerVal).trim().toLowerCase();
   const r = String(roomVal).trim().toLowerCase();
@@ -286,34 +298,59 @@ export function computeFuzzyCompatibility(seeker, room, customWeights) {
   const factorScores = {};
 
   // 1. Sleep Schedule (circular fuzzy trapezoid)
-  const seekerBed = fp.sleepSchedule !== undefined ? fp.sleepSchedule : 23.0;
-  const roomBed = lc.sleepSchedule !== undefined ? lc.sleepSchedule : 23.0;
-  const bedDiff = getCircularHourDiff(seekerBed, roomBed);
-  factorScores.sleepSchedule = Math.round(fuzzyCircadianMembership(bedDiff) * 100) / 100;
+  const isBedFlexible = fp.sleepSchedule === 'Flexible' || fp.sleepSchedule === null || lc.sleepSchedule === 'Flexible' || lc.sleepSchedule === null;
+  if (isBedFlexible) {
+    factorScores.sleepSchedule = 1.0;
+  } else {
+    const seekerBed = fp.sleepSchedule !== undefined ? Number(fp.sleepSchedule) : 23.0;
+    const roomBed = lc.sleepSchedule !== undefined ? Number(lc.sleepSchedule) : 23.0;
+    const bedDiff = getCircularHourDiff(seekerBed, roomBed);
+    factorScores.sleepSchedule = Math.round(fuzzyCircadianMembership(bedDiff) * 100) / 100;
+  }
 
   // 2. Wake Schedule (circular fuzzy trapezoid)
-  const seekerWake = fp.wakeSchedule !== undefined ? fp.wakeSchedule : 7.0;
-  const roomWake = lc.wakeSchedule !== undefined ? lc.wakeSchedule : 7.0;
-  const wakeDiff = getCircularHourDiff(seekerWake, roomWake);
-  factorScores.wakeSchedule = Math.round(fuzzyCircadianMembership(wakeDiff) * 100) / 100;
+  const isWakeFlexible = fp.wakeSchedule === 'Flexible' || fp.wakeSchedule === null || lc.wakeSchedule === 'Flexible' || lc.wakeSchedule === null;
+  if (isWakeFlexible) {
+    factorScores.wakeSchedule = 1.0;
+  } else {
+    const seekerWake = fp.wakeSchedule !== undefined ? Number(fp.wakeSchedule) : 7.0;
+    const roomWake = lc.wakeSchedule !== undefined ? Number(lc.wakeSchedule) : 7.0;
+    const wakeDiff = getCircularHourDiff(seekerWake, roomWake);
+    factorScores.wakeSchedule = Math.round(fuzzyCircadianMembership(wakeDiff) * 100) / 100;
+  }
 
   // 3. Cleanliness (1-5 scale)
-  const seekerClean = fp.cleanliness !== undefined ? fp.cleanliness : 4;
-  const roomClean = lc.cleanliness !== undefined ? lc.cleanliness : 4;
-  const cleanDiff = Math.abs(seekerClean - roomClean);
-  factorScores.cleanliness = Math.round(fuzzyScaleMembership(cleanDiff) * 100) / 100;
+  const isCleanFlexible = fp.cleanliness === 'Flexible' || fp.cleanliness === null || lc.cleanliness === 'Flexible' || lc.cleanliness === null;
+  if (isCleanFlexible) {
+    factorScores.cleanliness = 1.0;
+  } else {
+    const seekerClean = fp.cleanliness !== undefined ? Number(fp.cleanliness) : 4;
+    const roomClean = lc.cleanliness !== undefined ? Number(lc.cleanliness) : 4;
+    const cleanDiff = Math.abs(seekerClean - roomClean);
+    factorScores.cleanliness = Math.round(fuzzyScaleMembership(cleanDiff) * 100) / 100;
+  }
 
   // 4. Noise Tolerance (1-5 scale)
-  const seekerNoise = fp.noiseTolerance !== undefined ? fp.noiseTolerance : 3;
-  const roomNoise = lc.noiseTolerance !== undefined ? lc.noiseTolerance : 3;
-  const noiseDiff = Math.abs(seekerNoise - roomNoise);
-  factorScores.noiseTolerance = Math.round(fuzzyScaleMembership(noiseDiff) * 100) / 100;
+  const isNoiseFlexible = fp.noiseTolerance === 'Flexible' || fp.noiseTolerance === null || lc.noiseTolerance === 'Flexible' || lc.noiseTolerance === null;
+  if (isNoiseFlexible) {
+    factorScores.noiseTolerance = 1.0;
+  } else {
+    const seekerNoise = fp.noiseTolerance !== undefined ? Number(fp.noiseTolerance) : 3;
+    const roomNoise = lc.noiseTolerance !== undefined ? Number(lc.noiseTolerance) : 3;
+    const noiseDiff = Math.abs(seekerNoise - roomNoise);
+    factorScores.noiseTolerance = Math.round(fuzzyScaleMembership(noiseDiff) * 100) / 100;
+  }
 
   // 5. WFH Days (0-7 days)
-  const seekerWfh = fp.wfhDays !== undefined ? fp.wfhDays : 2;
-  const roomWfh = lc.wfhFrequency !== undefined ? lc.wfhFrequency : 2;
-  const wfhDiff = Math.abs(seekerWfh - roomWfh);
-  factorScores.wfhFrequency = Math.round(fuzzyWfhMembership(wfhDiff) * 100) / 100;
+  const isWfhFlexible = fp.wfhDays === 'Flexible' || fp.wfhDays === null || lc.wfhFrequency === 'Flexible' || lc.wfhFrequency === null;
+  if (isWfhFlexible) {
+    factorScores.wfhFrequency = 1.0;
+  } else {
+    const seekerWfh = fp.wfhDays !== undefined ? Number(fp.wfhDays) : 2;
+    const roomWfh = lc.wfhFrequency !== undefined ? Number(lc.wfhFrequency) : 2;
+    const wfhDiff = Math.abs(seekerWfh - roomWfh);
+    factorScores.wfhFrequency = Math.round(fuzzyWfhMembership(wfhDiff) * 100) / 100;
+  }
 
   // 6. Guest Policy (Day)
   factorScores.guestPolicy = Math.round(scoreCategoricalSynergy(fp.guestPolicy, lc.guestsDay) * 100) / 100;
@@ -338,9 +375,11 @@ export function computeFuzzyCompatibility(seeker, room, customWeights) {
 
   // 13. Dietary Alignment
   const seekerDiet = seeker?.profile?.hardConstraints?.dietaryRule || 'Any';
-  const roomDiet = lc.foodPreference || 'Pure Vegetarian';
+  const roomDiet = lc.foodPreference || 'Flexible';
   let dietScore = 1.0;
-  if (seekerDiet === 'Pure-Veg' || seekerDiet === 'Veg-Only Flat') {
+  if (seekerDiet === 'Flexible' || seekerDiet === 'Any' || roomDiet === 'Flexible') {
+    dietScore = 1.0;
+  } else if (seekerDiet === 'Pure-Veg' || seekerDiet === 'Veg-Only Flat') {
     dietScore = roomDiet === 'Pure Vegetarian' ? 1.0 : 0.0;
   } else if (seekerDiet === 'Flexible') {
     dietScore = roomDiet === 'Pure Vegetarian' ? 0.9 : 1.0;
@@ -349,9 +388,11 @@ export function computeFuzzyCompatibility(seeker, room, customWeights) {
 
   // 14. Smoking Alignment
   const seekerSmoking = seeker?.profile?.hardConstraints?.smokingPolicy || 'Flexible';
-  const roomSmoking = lc.smoking || 'Strictly Non-Smoking';
+  const roomSmoking = lc.smoking || 'Flexible';
   let smokeScore = 1.0;
-  if (seekerSmoking === 'Strictly Non-Smoking') {
+  if (seekerSmoking === 'Flexible' || roomSmoking === 'Flexible') {
+    smokeScore = 1.0;
+  } else if (seekerSmoking === 'Strictly Non-Smoking') {
     smokeScore = roomSmoking === 'Strictly Non-Smoking' ? 1.0 : (roomSmoking === 'Balcony Only' ? 0.5 : 0.0);
   } else if (seekerSmoking === 'Balcony Only') {
     smokeScore = roomSmoking === 'Balcony Only' || roomSmoking === 'Strictly Non-Smoking' ? 1.0 : 0.3;
@@ -360,9 +401,11 @@ export function computeFuzzyCompatibility(seeker, room, customWeights) {
 
   // 15. Alcohol Alignment
   const seekerAlcohol = seeker?.profile?.hardConstraints?.alcoholPolicy || 'Flexible';
-  const roomAlcohol = lc.alcohol || 'Teetotaler';
+  const roomAlcohol = lc.alcohol || 'Flexible';
   let alcoholScore = 1.0;
-  if (seekerAlcohol === 'Teetotaler') {
+  if (seekerAlcohol === 'Flexible' || roomAlcohol === 'Flexible') {
+    alcoholScore = 1.0;
+  } else if (seekerAlcohol === 'Teetotaler') {
     alcoholScore = roomAlcohol === 'Teetotaler' ? 1.0 : (roomAlcohol === 'Social Drinking OK' ? 0.5 : 0.0);
   } else if (seekerAlcohol === 'Moderate') {
     alcoholScore = roomAlcohol === 'Allowed' ? 0.6 : 1.0;
@@ -370,7 +413,13 @@ export function computeFuzzyCompatibility(seeker, room, customWeights) {
   factorScores.alcohol = alcoholScore;
 
   // 16. Pets Synergy
-  factorScores.petsPreference = Math.round(scoreCategoricalSynergy(seeker?.profile?.hardConstraints?.petPolicy, lc.petsPreference) * 100) / 100;
+  const seekerPets = seeker?.profile?.hardConstraints?.petPolicy || 'Flexible';
+  const roomPets = lc.petsPreference || 'Flexible';
+  if (seekerPets === 'Flexible' || roomPets === 'Flexible') {
+    factorScores.petsPreference = 1.0;
+  } else {
+    factorScores.petsPreference = Math.round(scoreCategoricalSynergy(seekerPets, roomPets) * 100) / 100;
+  }
 
   // Factor-to-importance weight mapping
   const weightMap = {

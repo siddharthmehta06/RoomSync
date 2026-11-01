@@ -13,6 +13,7 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { MatchesPage } from './pages/MatchesPage';
 import { OwnerDashboardPage } from './pages/OwnerDashboardPage';
+import { OwnerVerificationPage } from './pages/OwnerVerificationPage';
 import { CreateListingPage } from './pages/CreateListingPage';
 import { SavedRoomsPage } from './pages/SavedRoomsPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -64,21 +65,31 @@ export function App() {
               {/* 7. Compatibility Matches */}
               <Route path="matches" element={<MatchesPage />} />
               
-              {/* 8. Owner Dashboard (Protected) */}
+              {/* 8. Owner Verification */}
+              <Route 
+                path="owner/verify" 
+                element={
+                  <ProtectedRoute>
+                    <OwnerVerificationPage />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* 8b. Owner Dashboard (Protected - Owner only) */}
               <Route 
                 path="owner/dashboard" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="owner">
                     <OwnerDashboardPage />
                   </ProtectedRoute>
                 } 
               />
               
-              {/* 9. Create / Edit Listing (Protected) */}
+              {/* 9. Create / Edit Listing (Protected - Owner only) */}
               <Route 
                 path="owner/listings/new" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="owner">
                     <CreateListingPage />
                   </ProtectedRoute>
                 } 
@@ -86,7 +97,7 @@ export function App() {
               <Route 
                 path="owner/listings/:id/edit" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="owner">
                     <CreateListingPage />
                   </ProtectedRoute>
                 } 

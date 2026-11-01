@@ -5,6 +5,8 @@ import {
   login,
   getMe,
   forgotPassword,
+  verifyResetOTP,
+  resetPasswordWithOTP,
   resetPassword,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -61,7 +63,7 @@ const loginValidation = [
 ];
 
 /**
- * Validation rules for forgot password
+ * Validation rules for forgot password request
  */
 const forgotPasswordValidation = [
   body('email')
@@ -74,7 +76,56 @@ const forgotPasswordValidation = [
 ];
 
 /**
- * Validation rules for password reset
+ * Validation rules for verifying OTP
+ */
+const verifyOtpValidation = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email address'),
+  body('otp')
+    .trim()
+    .notEmpty()
+    .withMessage('OTP code is required')
+    .matches(/^[0-9]{6}$/)
+    .withMessage('OTP must be a 6-digit number'),
+  validateRequest,
+];
+
+/**
+ * Validation rules for resetting password with OTP token
+ */
+const resetPasswordWithOtpValidation = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email address'),
+  body('resetToken')
+    .trim()
+    .notEmpty()
+    .withMessage('Reset authorization token is required'),
+  body('password')
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters'),
+  body('confirmPassword')
+    .optional()
+    .custom((val, { req }) => {
+      if (val && val !== req.body.password) {
+        throw new Error('Passwords do not match');
+      }
+      return true;
+    }),
+  validateRequest,
+];
+
+/**
+ * Validation rules for legacy URL token password reset
  */
 const resetPasswordValidation = [
   body('password')
@@ -89,9 +140,14 @@ const resetPasswordValidation = [
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
 router.get('/me', protect, getMe);
+
+// OTP-Based Password Reset Routes
 router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
+router.post('/verify-otp', verifyOtpValidation, verifyResetOTP);
+router.post('/reset-password-otp', resetPasswordWithOtpValidation, resetPasswordWithOTP);
+
+// Legacy URL Token Routes
 router.post('/reset-password/:token', resetPasswordValidation, resetPassword);
 router.put('/reset-password/:token', resetPasswordValidation, resetPassword);
 
 export default router;
-

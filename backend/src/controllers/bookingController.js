@@ -1,22 +1,32 @@
 import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import RoomListing from '../models/RoomListing.js';
+import MutualAgreement from '../models/MutualAgreement.js';
 
 /**
- * @desc    Atomically reserve a room listing with concurrency & double-booking prevention
- * @route   POST /api/bookings/reserve
+ * @desc    Submit a booking request for a room listing
+ * @route   POST /api/bookings/request (or POST /api/bookings/reserve)
  * @access  Private (Seeker)
  */
 export async function reserveRoom(req, res, next) {
   try {
-    const { roomId, bookingType, scheduledDate, notes, tokenAmount } = req.body;
+    const {
+      roomId,
+      moveInDate,
+      stayDuration,
+      occupantsCount,
+      message,
+      notes,
+      scheduledDate,
+      bookingType,
+    } = req.body;
 
     if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {
       return res.status(400).json({
         success: false,
         error: {
           code: 'INVALID_ROOM_ID',
-          message: 'A valid roomId is required to reserve a room.',
+          message: 'A valid roomId is required to request a room.',
         },
       });
     }
@@ -47,7 +57,7 @@ export async function reserveRoom(req, res, next) {
     const existingSeekerBooking = await Booking.findOne({
       room: roomId,
       seeker: req.user._id,
-      status: { $in: ['pending', 'confirmed'] },
+      status: { $in: ['pending', 'accepted', 'confirmed'] },
     });
 
     if (existingSeekerBooking) {
@@ -55,97 +65,178 @@ export async function reserveRoom(req, res, next) {
         success: false,
         error: {
           code: 'ALREADY_RESERVED_BY_YOU',
-          message: 'You already have an active reservation for this room.',
+          message: 'You already have an active booking request for this room.',
           details: [{ bookingId: existingSeekerBooking._id }],
         },
       });
     }
 
-    const now = new Date();
-    // 15-minute temporary reservation lock (Time-To-Live hold window)
-    const holdLockExpiry = new Date(now.getTime() + 15 * 60 * 1000);
+    const targetMoveIn = moveInDate ? new Date(moveInDate) : (scheduledDate ? new Date(scheduledDate) : new Date());
 
-    // ATOMIC COMPARE-AND-SWAP (CAS):
-    // Only updates if status is currently 'active' OR
-    // if a previous reservation has expired (reservedUntil < now)
-    const atomicallyReservedRoom = await RoomListing.findOneAndUpdate(
-      {
-        _id: roomId,
-        $or: [
-          { status: 'active' },
-          { status: 'reserved', reservedUntil: { $lt: now } },
-        ],
-      },
-      {
-        $set: {
-          status: 'reserved',
-          reservedBy: req.user._id,
-          reservedUntil: holdLockExpiry,
-        },
-      },
-      { new: true }
-    );
+    const booking = await Booking.create({
+      room: roomId,
+      seeker: req.user._id,
+      owner: targetRoom.owner,
+      bookingType: bookingType || 'booking_request',
+      moveInDate: targetMoveIn,
+      stayDuration: Number(stayDuration) || 6,
+      occupantsCount: Number(occupantsCount) || 1,
+      message: message ? message.trim() : (notes ? notes.trim() : ''),
+      status: 'pending',
+    });
 
-    // If no document matched, another concurrent transaction acquired the lock first!
-    if (!atomicallyReservedRoom) {
+    const populatedBooking = await Booking.findById(booking._id)
+      .populate('room', 'title locality city rent deposit images furnishing roomType')
+      .populate('owner', 'fullName email phone avatar isVerified ownerVerificationStatus');
+
+    return res.status(201).json({
+      success: true,
+      message: 'Booking request sent to owner. Awaiting owner review and acceptance.',
+      data: populatedBooking,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
       return res.status(409).json({
         success: false,
         error: {
-          code: 'ROOM_ALREADY_RESERVED',
-          message:
-            'This room has just been reserved by another seeker or is currently occupied. Please explore other listings.',
+          code: 'DUPLICATE_ACTIVE_BOOKING',
+          message: 'An active booking request already exists for this room.',
+        },
+      });
+    }
+    next(error);
+  }
+}
+
+/**
+ * @desc    Owner responds to booking request (Accept or Reject)
+ * @route   PATCH /api/bookings/:id/respond
+ * @access  Private (Owner / Admin)
+ */
+export async function respondBookingRequest(req, res, next) {
+  try {
+    const { id } = req.params;
+    const { action, rejectionReason } = req.body;
+
+    if (!['accept', 'reject'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_ACTION',
+          message: 'Action must be either "accept" or "reject".',
         },
       });
     }
 
-    // Atomically create the Booking record
-    try {
-      const booking = await Booking.create({
-        room: roomId,
-        seeker: req.user._id,
-        owner: atomicallyReservedRoom.owner,
-        bookingType: bookingType || 'tenancy_reservation',
-        scheduledDate: scheduledDate ? new Date(scheduledDate) : now,
-        status: 'pending',
-        tokenAmount: tokenAmount !== undefined ? Number(tokenAmount) : 5000,
-        notes: notes ? notes.trim() : '',
-        reservedUntil: holdLockExpiry,
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'BOOKING_NOT_FOUND', message: 'Booking request not found.' },
       });
+    }
 
-      return res.status(201).json({
+    const booking = await Booking.findById(id).populate('room');
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'BOOKING_NOT_FOUND', message: 'Booking request not found.' },
+      });
+    }
+
+    const userId = req.user._id.toString();
+    const isOwner = booking.owner.toString() === userId || req.user.role === 'admin';
+
+    if (!isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Only the property owner can accept or reject this request.',
+        },
+      });
+    }
+
+    if (booking.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_STATUS',
+          message: `Cannot respond to a booking request that is already ${booking.status}.`,
+        },
+      });
+    }
+
+    if (action === 'reject') {
+      booking.status = 'rejected';
+      booking.rejectionReason = rejectionReason ? rejectionReason.trim() : 'Declined by owner';
+      await booking.save();
+
+      return res.status(200).json({
         success: true,
-        message:
-          'Room reserved successfully with a 15-minute hold lock. Please proceed to token payment verification.',
+        message: 'Booking request declined.',
         data: booking,
       });
-    } catch (bookingError) {
-      // Rollback the room reservation lock if the booking document insertion collided
-      await RoomListing.updateOne(
-        { _id: roomId, reservedBy: req.user._id },
-        {
-          $set: {
-            status: 'active',
-            reservedBy: null,
-            reservedUntil: null,
-          },
-        }
-      );
-
-      if (bookingError.code === 11000) {
-        return res.status(409).json({
-          success: false,
-          error: {
-            code: 'DUPLICATE_ACTIVE_BOOKING',
-            message: 'An active booking record already exists for this room.',
-          },
-        });
-      }
-
-      throw bookingError;
     }
+
+    // Action === 'accept': Generate Mutual Digital Agreement
+    booking.status = 'accepted';
+
+    const agreementNumber = `RS-AGR-${Date.now().toString(36).toUpperCase()}-${Math.random()
+      .toString(36)
+      .substring(2, 6)
+      .toUpperCase()}`;
+
+    const agreement = await MutualAgreement.create({
+      agreementNumber,
+      booking: booking._id,
+      room: booking.room._id,
+      seeker: booking.seeker,
+      owner: booking.owner,
+      monthlyRent: booking.room.rent,
+      securityDeposit: booking.room.deposit,
+      moveInDate: booking.moveInDate || new Date(),
+      stayDuration: booking.stayDuration || 6,
+      occupantsCount: booking.occupantsCount || 1,
+      terms: {
+        livingConditionsSummary: booking.room.livingConditions || {},
+      },
+    });
+
+    booking.agreement = agreement._id;
+    await booking.save();
+
+    // Mark room as reserved
+    await RoomListing.findByIdAndUpdate(booking.room._id, {
+      status: 'reserved',
+      reservedBy: booking.seeker,
+    });
+
+    const populatedAgreement = await MutualAgreement.findById(agreement._id)
+      .populate('room', 'title locality city rent deposit furnishing roomType')
+      .populate('seeker', 'fullName email phone')
+      .populate('owner', 'fullName email phone ownerVerificationStatus');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Booking request accepted and mutual agreement generated successfully.',
+      data: {
+        booking,
+        agreement: populatedAgreement,
+      },
+    });
   } catch (error) {
     next(error);
   }
+}
+
+/**
+ * @desc    Confirm a booking (Host accepts request - backwards compatibility alias)
+ * @route   PATCH /api/bookings/:id/confirm
+ * @access  Private (Owner or Admin)
+ */
+export async function confirmBooking(req, res, next) {
+  req.body.action = 'accept';
+  return respondBookingRequest(req, res, next);
 }
 
 /**
@@ -156,8 +247,9 @@ export async function reserveRoom(req, res, next) {
 export async function getMyBookings(req, res, next) {
   try {
     const bookings = await Booking.find({ seeker: req.user._id })
-      .populate('room', 'title locality city rent deposit images status furnishing roomType')
-      .populate('owner', 'fullName email phone avatar isVerified')
+      .populate('room', 'title locality city rent deposit images status furnishing roomType livingConditions')
+      .populate('owner', 'fullName email phone avatar isVerified ownerVerificationStatus')
+      .populate('agreement')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -180,8 +272,9 @@ export async function getMyBookings(req, res, next) {
 export async function getOwnerBookings(req, res, next) {
   try {
     const bookings = await Booking.find({ owner: req.user._id })
-      .populate('room', 'title locality city rent deposit status')
+      .populate('room', 'title locality city rent deposit status images furnishing roomType livingConditions')
       .populate('seeker', 'fullName email phone avatar occupation company isVerified')
+      .populate('agreement')
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -218,7 +311,8 @@ export async function getBookingById(req, res, next) {
     const booking = await Booking.findById(id)
       .populate('room', 'title locality city rent deposit images status amenities livingConditions')
       .populate('seeker', 'fullName email phone avatar occupation company isVerified')
-      .populate('owner', 'fullName email phone avatar isVerified');
+      .populate('owner', 'fullName email phone avatar isVerified ownerVerificationStatus')
+      .populate('agreement');
 
     if (!booking) {
       return res.status(404).json({
@@ -299,11 +393,11 @@ export async function cancelBooking(req, res, next) {
       });
     }
 
-    if (['cancelled', 'rejected', 'completed'].includes(booking.status)) {
+    if (['cancelled', 'rejected'].includes(booking.status)) {
       return res.status(400).json({
         success: false,
         error: {
-          code: 'CANNOT_CANCEL_COMPLETED',
+          code: 'CANNOT_CANCEL',
           message: `Cannot cancel a booking that is already ${booking.status}.`,
         },
       });
@@ -312,7 +406,12 @@ export async function cancelBooking(req, res, next) {
     booking.status = 'cancelled';
     await booking.save();
 
-    // Release the room lock back to 'active' atomically if reserved for this booking
+    // If agreement existed, cancel it
+    if (booking.agreement) {
+      await MutualAgreement.findByIdAndUpdate(booking.agreement, { status: 'cancelled' });
+    }
+
+    // Release the room lock back to 'active'
     await RoomListing.updateOne(
       {
         _id: booking.room,
@@ -330,86 +429,7 @@ export async function cancelBooking(req, res, next) {
 
     res.status(200).json({
       success: true,
-      message: 'Booking cancelled successfully and room has been released for other seekers.',
-      data: booking,
-    });
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * @desc    Confirm a booking (Host accepts or deposit verified)
- * @route   PATCH /api/bookings/:id/confirm
- * @access  Private (Owner or Admin)
- */
-export async function confirmBooking(req, res, next) {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'BOOKING_NOT_FOUND',
-          message: 'Booking not found.',
-        },
-      });
-    }
-
-    const booking = await Booking.findById(id);
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          code: 'BOOKING_NOT_FOUND',
-          message: 'Booking not found.',
-        },
-      });
-    }
-
-    const isAuthorized =
-      booking.owner.toString() === req.user._id.toString() ||
-      req.user.role === 'admin';
-
-    if (!isAuthorized) {
-      return res.status(403).json({
-        success: false,
-        error: {
-          code: 'UNAUTHORIZED_CONFIRMATION',
-          message: 'Only the property host or admin can confirm this booking.',
-        },
-      });
-    }
-
-    if (booking.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        error: {
-          code: 'INVALID_BOOKING_STATUS',
-          message: `Cannot confirm booking currently with status "${booking.status}".`,
-        },
-      });
-    }
-
-    booking.status = 'confirmed';
-    await booking.save();
-
-    // Set room status to 'reserved' permanently until move-in
-    await RoomListing.updateOne(
-      { _id: booking.room },
-      {
-        $set: {
-          status: 'reserved',
-          reservedBy: booking.seeker,
-          reservedUntil: null, // Indefinite lock while confirmed
-        },
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: 'Booking confirmed successfully.',
+      message: 'Booking request cancelled successfully.',
       data: booking,
     });
   } catch (error) {

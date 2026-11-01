@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   ExternalLink,
   Star,
+  FileCheck,
 } from 'lucide-react';
 import { 
   fetchRoomById, 
@@ -45,6 +46,7 @@ import { Badge } from '../components/ui/Badge';
 import { CompatibilityBadge } from '../components/ui/CompatibilityBadge';
 import { Card, CardContent } from '../components/ui/Card';
 import { RequestVisitModal } from '../components/modals/RequestVisitModal';
+import { SendBookingRequestModal } from '../components/modals/SendBookingRequestModal';
 
 export const RoomDetailsPage = () => {
   const { id } = useParams();
@@ -57,6 +59,7 @@ export const RoomDetailsPage = () => {
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
   const [isVisitModalOpen, setIsVisitModalOpen] = useState(false);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   
   // Deterministic 22-Factor Compatibility Engine State
   const [compatStatus, setCompatStatus] = useState('idle'); // 'idle' | 'loading' | 'success' | 'incomplete' | 'error' | 'unauthenticated' | 'owner'
@@ -263,7 +266,9 @@ export const RoomDetailsPage = () => {
     );
   }
 
-  const { livingConditions } = room;
+  const livingConditions = room.livingConditions || room.questionnaire || {};
+  const amenities = Array.isArray(room.amenities) ? room.amenities : [];
+  const images = Array.isArray(room.images) && room.images.length > 0 ? room.images : ['https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1200&q=80'];
   const ownerName = room.owner?.fullName || room.owner?.name || 'Property Owner';
   const rawPhone = room.owner?.phone || '';
   const cleanPhone = rawPhone.replace(/[^0-9+]/g, '');
@@ -362,13 +367,13 @@ export const RoomDetailsPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
         <div className="md:col-span-3 aspect-[16/10] sm:aspect-[16/9] rounded-2xl sm:rounded-3xl overflow-hidden bg-surface-200">
           <img
-            src={room.images[activeImageIndex]}
+            src={images[activeImageIndex] || images[0]}
             alt={room.title}
             className="w-full h-full object-cover transition-all duration-300"
           />
         </div>
         <div className="flex md:flex-col gap-3 overflow-x-auto md:overflow-y-auto">
-          {room.images.map((img, idx) => (
+          {images.map((img, idx) => (
             <button
               key={idx}
               onClick={() => setActiveImageIndex(idx)}
@@ -691,7 +696,7 @@ export const RoomDetailsPage = () => {
           <section className="bg-white rounded-3xl p-6 sm:p-8 border border-black/[0.06] shadow-subtle">
             <h2 className="text-lg font-semibold text-ink-primary mb-4">Included Amenities</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {room.amenities.map((item, idx) => (
+              {amenities.map((item, idx) => (
                 <div key={idx} className="flex items-center gap-2 p-3 rounded-xl bg-surface-50 border border-surface-200 text-xs text-ink-primary font-medium">
                   <CheckCircle2 className="w-4 h-4 text-brand-600 shrink-0" />
                   <span>{item}</span>
@@ -920,11 +925,26 @@ export const RoomDetailsPage = () => {
                 Request a Visit
               </Button>
 
-              <Link to={`/bookings?roomId=${room._id || room.id}`}>
-                <Button variant="ghost" className="w-full justify-center text-xs text-ink-secondary">
-                  Review Digital Agreement & Book
+              {user?.role !== 'owner' ? (
+                <Button 
+                  variant="primary" 
+                  className="w-full justify-center bg-teal-800 hover:bg-teal-900 text-white shadow-xs" 
+                  icon={FileCheck}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      navigate(`/login?redirect=/rooms/${id}`);
+                      return;
+                    }
+                    setIsBookingModalOpen(true);
+                  }}
+                >
+                  Send Booking Request
                 </Button>
-              </Link>
+              ) : (
+                <div className="p-3 text-center rounded-xl bg-surface-100 text-xs text-ink-tertiary">
+                  You are viewing this listing as an Owner.
+                </div>
+              )}
             </div>
           </div>
 
@@ -935,7 +955,7 @@ export const RoomDetailsPage = () => {
               <span>RoomSync Safe Living Protocol</span>
             </div>
             <p className="leading-relaxed">
-              Never transfer cash or deposits outside RoomSync. Use our digital agreement system with QR verification and test escrow safeguards.
+              Never transfer cash or deposits outside RoomSync. Use our digital mutual agreement system with verified owner credentials and transparent tenancy terms.
             </p>
           </div>
 
@@ -955,6 +975,15 @@ export const RoomDetailsPage = () => {
         }}
       />
 
+    {/* Send Booking Request Modal */}
+      <SendBookingRequestModal
+        isOpen={isBookingModalOpen}
+        onClose={() => setIsBookingModalOpen(false)}
+        room={room}
+        onRequestSubmitted={() => {
+          fetchRoomById(id, token).then((r) => setRoom(r)).catch(() => {});
+        }}
+      />
     </div>
   );
 };

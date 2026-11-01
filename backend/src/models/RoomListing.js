@@ -1,116 +1,132 @@
 import mongoose from 'mongoose';
 
+const roomQuestionnaireSchema = new mongoose.Schema(
+  {
+    location: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    budget: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    foodPreference: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    smoking: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    alcohol: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    sleepSchedule: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    wakeSchedule: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    cleanliness: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    noiseTolerance: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    guestsDay: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    guestsOvernight: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    socialPreference: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    workSchedule: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    wfhFrequency: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    studyHabits: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    cookingFrequency: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    pets: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    foodSharing: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    moveInDate: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    stayDuration: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    personalSpace: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    rulesStrictness: { type: mongoose.Schema.Types.Mixed, default: undefined },
+  },
+  { _id: false }
+);
+
 const livingConditionsSchema = new mongoose.Schema(
   {
+    location: {
+      type: String,
+      trim: true,
+      default: 'Flexible',
+    },
     locationCommute: {
       type: String,
       trim: true,
-      default: '',
+      default: 'Flexible',
+    },
+    budget: {
+      type: mongoose.Schema.Types.Mixed,
+      default: 'Flexible',
     },
     foodPreference: {
       type: String,
-      required: [true, 'Flat food preference environment is required'],
-      enum: {
-        values: [
-          'Pure Vegetarian',
-          'Eggetarian / Flexible Non-veg',
-          'Non-Veg Welcome',
-        ],
-        message: '{VALUE} is not a valid food preference rule',
-      },
-      default: 'Pure Vegetarian',
+      default: 'Flexible',
     },
     smoking: {
       type: String,
-      required: [true, 'Flat smoking policy is required'],
-      enum: {
-        values: ['Strictly Non-Smoking', 'Balcony Only', 'Allowed'],
-        message: '{VALUE} is not a valid smoking rule',
-      },
-      default: 'Strictly Non-Smoking',
+      default: 'Flexible',
     },
     alcohol: {
       type: String,
-      required: [true, 'Flat alcohol policy is required'],
-      enum: {
-        values: ['Teetotaler', 'Social Drinking OK', 'Allowed'],
-        message: '{VALUE} is not a valid alcohol rule',
-      },
-      default: 'Teetotaler',
+      default: 'Flexible',
     },
     sleepSchedule: {
-      type: Number,
-      required: [true, 'Typical flat bedtime is required'],
-      min: [0.0, 'Sleep schedule hour must be between 0.0 and 23.5'],
-      max: [23.5, 'Sleep schedule hour must be between 0.0 and 23.5'],
-      default: 23.0,
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     wakeSchedule: {
-      type: Number,
-      required: [true, 'Typical flat wake time is required'],
-      min: [0.0, 'Wake schedule hour must be between 0.0 and 23.5'],
-      max: [23.5, 'Wake schedule hour must be between 0.0 and 23.5'],
-      default: 7.0,
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     cleanliness: {
-      type: Number,
-      required: [true, 'Flat cleanliness standard is required'],
-      min: [1.0, 'Cleanliness rating must be between 1.0 and 5.0'],
-      max: [5.0, 'Cleanliness rating must be between 1.0 and 5.0'],
-      default: 4.0,
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     noiseTolerance: {
-      type: Number,
-      required: [true, 'Flat noise environment is required'],
-      min: [1.0, 'Noise tolerance must be between 1.0 and 5.0'],
-      max: [5.0, 'Noise tolerance must be between 1.0 and 5.0'],
-      default: 3.0,
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     guestsDay: {
       type: String,
-      default: 'Occasional friends visiting with prior heads-up',
+      default: 'Flexible',
     },
     guestsOvernight: {
       type: String,
-      default: 'Allowed with 24h prior notification',
+      default: 'Flexible',
     },
     socialPreference: {
       type: String,
-      default: 'Balanced: relaxed weekdays, casual board-game weekends',
+      default: 'Flexible',
     },
     workSchedule: {
       type: String,
-      default: 'Standard day shift (10 AM - 7 PM)',
+      default: 'Flexible',
     },
     wfhFrequency: {
-      type: Number,
-      min: [0, 'WFH frequency must be between 0 and 7 days'],
-      max: [7, 'WFH frequency must be between 0 and 7 days'],
-      default: 2,
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     studyHabits: {
       type: String,
-      default: 'Quiet reading hours after 10 PM',
+      default: 'Flexible',
     },
     cookingFrequency: {
       type: String,
-      default: 'Shared cook prepares lunch & dinner',
+      default: 'Flexible',
+    },
+    pets: {
+      type: String,
+      default: 'Flexible',
     },
     petsPreference: {
       type: String,
-      default: 'No pets currently; cat-friendly',
+      default: 'Flexible',
     },
     foodSharing: {
       type: String,
-      default: 'Split pantry staples (oil, spices, milk, groceries)',
+      default: 'Flexible',
+    },
+    moveInDate: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    stayDuration: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
     personalSpace: {
       type: String,
-      default: 'High respect for personal rooms; friendly lounge chats',
+      default: 'Flexible',
     },
     rulesStrictness: {
       type: String,
-      default: 'Gated society, 24/7 security, no arbitrary curfews',
+      default: 'Flexible',
     },
   },
   { _id: false }
@@ -125,7 +141,7 @@ const pointSchema = new mongoose.Schema(
     },
     coordinates: {
       type: [Number], // [longitude, latitude]
-      default: [77.5946, 12.9716], // Default Bengaluru [lng, lat]
+      default: [72.8697, 19.1136], // Default Mumbai [lng, lat]
     },
   },
   { _id: false }
@@ -242,7 +258,6 @@ const roomListingSchema = new mongoose.Schema(
     },
     minStayMonths: {
       type: Number,
-      required: [true, 'Minimum stay duration is required'],
       min: [1, 'Minimum stay must be at least 1 month'],
       max: [36, 'Minimum stay cannot exceed 36 months'],
       default: 6,
@@ -255,9 +270,22 @@ const roomListingSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // The separate 22-factor questionnaire saved for this specific room listing
+    questionnaire: {
+      type: roomQuestionnaireSchema,
+      default: () => ({}),
+    },
+    isQuestionnaireComplete: {
+      type: Boolean,
+      default: true,
+    },
+    questionnaireCompletedCount: {
+      type: Number,
+      default: 22,
+    },
+    // Synchronized living conditions for compatibility and queries
     livingConditions: {
       type: livingConditionsSchema,
-      required: [true, 'Living conditions are required'],
       default: () => ({}),
     },
     reviews: { type: [roomReviewSchema], default: [] },
@@ -292,12 +320,10 @@ const roomListingSchema = new mongoose.Schema(
   }
 );
 
-// Indexes for search and query performance
-roomListingSchema.index({ city: 1, locality: 1 });
-roomListingSchema.index({ rent: 1 });
-roomListingSchema.index({ status: 1 });
-roomListingSchema.index({ owner: 1 });
 roomListingSchema.index({ location: '2dsphere' });
+roomListingSchema.index({ city: 1, locality: 1, status: 1 });
+roomListingSchema.index({ rent: 1, status: 1 });
+roomListingSchema.index({ owner: 1, status: 1 });
 
 const RoomListing = mongoose.model('RoomListing', roomListingSchema);
 export default RoomListing;

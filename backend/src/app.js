@@ -15,6 +15,8 @@ import matchRoutes from './routes/matchRoutes.js';
 import conversationRoutes from './routes/conversationRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
 import visitRoutes from './routes/visitRoutes.js';
+import verificationRoutes from './routes/verificationRoutes.js';
+import agreementRoutes from './routes/agreementRoutes.js';
 
 const app = express();
 
@@ -60,6 +62,8 @@ app.use('/api/matches', matchRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/visits', visitRoutes);
+app.use('/api/verification', verificationRoutes);
+app.use('/api/agreements', agreementRoutes);
 
 // Fallback error middlewares
 app.use(notFound);

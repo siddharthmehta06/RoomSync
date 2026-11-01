@@ -94,6 +94,53 @@ export function authorize(...roles) {
 }
 
 /**
+ * Verified Owner Guard
+ * Strictly ensures the user is an owner/admin AND their government identity verification is approved.
+ * Unverified owners or seekers cannot publish or modify listings.
+ */
+export function requireVerifiedOwner(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required.',
+      error: { code: 'UNAUTHORIZED', message: 'Authentication required.' },
+    });
+  }
+
+  // Admins always have access
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  // Must have role 'owner'
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access restricted to property owners only. Room Seekers cannot publish or manage listings.',
+      error: {
+        code: 'ROLE_FORBIDDEN',
+        message: 'Room Seekers cannot publish or manage room listings.',
+      },
+    });
+  }
+
+  // Must have verified owner identity
+  if (req.user.ownerVerificationStatus !== 'Verified') {
+    return res.status(403).json({
+      success: false,
+      message: 'Government identity verification required. Please verify your identity before publishing or managing room listings.',
+      error: {
+        code: 'OWNER_NOT_VERIFIED',
+        status: req.user.ownerVerificationStatus || 'Not Started',
+        message: 'Identity verification is mandatory for room owners to prevent rental fraud.',
+      },
+    });
+  }
+
+  next();
+}
+
+/**
  * Optional authentication middleware - populates req.user if valid token exists,
  * but allows unauthenticated requests to proceed.
  */

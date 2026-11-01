@@ -1,21 +1,57 @@
 import mongoose from 'mongoose';
 
+const canonicalFactorsSchema = new mongoose.Schema(
+  {
+    location: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    budget: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    foodPreference: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    smoking: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    alcohol: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    sleepSchedule: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    wakeSchedule: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    cleanliness: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    noiseTolerance: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    guestsDay: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    guestsOvernight: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    socialPreference: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    workSchedule: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    wfhFrequency: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    studyHabits: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    cookingFrequency: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    pets: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    foodSharing: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    moveInDate: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    stayDuration: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    personalSpace: { type: mongoose.Schema.Types.Mixed, default: undefined },
+    rulesStrictness: { type: mongoose.Schema.Types.Mixed, default: undefined },
+  },
+  { _id: false }
+);
+
 const hardConstraintsSchema = new mongoose.Schema(
   {
     budgetCeiling: {
       type: Number,
-      required: [true, 'Budget ceiling is required'],
+      default: 22000,
       min: [1000, 'Budget ceiling must be at least ₹1,000'],
     },
     maxDeposit: {
       type: Number,
-      default: null,
+      default: 50000,
       min: [0, 'Deposit cannot be negative'],
     },
     dietaryRule: {
       type: String,
       enum: {
-        values: ['Pure-Veg', 'Veg-Only Flat', 'Flexible', 'Any'],
+        values: [
+          'Pure-Veg',
+          'Pure Vegetarian',
+          'Veg-Only Flat',
+          'Eggetarian / Flexible Non-veg',
+          'Non-Veg Welcome',
+          'Flexible',
+          'Any',
+        ],
         message: '{VALUE} is not a valid dietary rule',
       },
       default: 'Any',
@@ -23,7 +59,7 @@ const hardConstraintsSchema = new mongoose.Schema(
     smokingPolicy: {
       type: String,
       enum: {
-        values: ['Strictly Non-Smoking', 'Balcony Only', 'Flexible'],
+        values: ['Strictly Non-Smoking', 'Balcony Only', 'Allowed', 'Flexible'],
         message: '{VALUE} is not a valid smoking policy',
       },
       default: 'Flexible',
@@ -31,7 +67,14 @@ const hardConstraintsSchema = new mongoose.Schema(
     alcoholPolicy: {
       type: String,
       enum: {
-        values: ['Teetotaler', 'Moderate', 'Flexible'],
+        values: [
+          'Teetotaler',
+          'Moderate / Social Drinking',
+          'Moderate',
+          'Allowed',
+          'Flexible',
+          'Social Drinking OK',
+        ],
         message: '{VALUE} is not a valid alcohol policy',
       },
       default: 'Flexible',
@@ -39,14 +82,21 @@ const hardConstraintsSchema = new mongoose.Schema(
     petPolicy: {
       type: String,
       enum: {
-        values: ['Strictly No Pets', 'Pet-Friendly', 'Has Pet', 'Flexible'],
+        values: [
+          'Strictly No Pets',
+          'Pet-Friendly',
+          'Has Pet',
+          'Flexible',
+          'Pets Allowed',
+          'Allergies / No Pets',
+        ],
         message: '{VALUE} is not a valid pet policy',
       },
       default: 'Flexible',
     },
     maxCommuteMins: {
       type: Number,
-      default: null,
+      default: 45,
       min: [5, 'Commute time must be at least 5 minutes'],
       max: [180, 'Commute time cannot exceed 180 minutes'],
     },
@@ -72,58 +122,75 @@ const flexiblePreferencesSchema = new mongoose.Schema(
   {
     sleepSchedule: {
       type: Number,
-      required: [true, 'Sleep schedule is required'],
+      default: 23.0,
       min: [0.0, 'Sleep schedule hour must be between 0.0 and 23.5'],
       max: [23.5, 'Sleep schedule hour must be between 0.0 and 23.5'],
-      default: 23.0,
     },
     wakeSchedule: {
       type: Number,
-      required: [true, 'Wake schedule is required'],
+      default: 7.0,
       min: [0.0, 'Wake schedule hour must be between 0.0 and 23.5'],
       max: [23.5, 'Wake schedule hour must be between 0.0 and 23.5'],
-      default: 7.0,
     },
     cleanliness: {
       type: Number,
-      required: [true, 'Cleanliness rating is required'],
+      default: 4,
       min: [1, 'Cleanliness must be between 1 and 5'],
       max: [5, 'Cleanliness must be between 1 and 5'],
-      default: 4,
     },
     noiseTolerance: {
       type: Number,
-      required: [true, 'Noise tolerance is required'],
+      default: 3,
       min: [1, 'Noise tolerance must be between 1 and 5'],
       max: [5, 'Noise tolerance must be between 1 and 5'],
-      default: 3,
     },
     guestPolicy: {
       type: String,
-      required: [true, 'Guest policy is required'],
+      default: 'Occasional',
       enum: {
-        values: ['Rare', 'Occasional', 'Frequent'],
+        values: [
+          'Rare',
+          'Occasional',
+          'Frequent',
+          'Flexible',
+          'Rare / Advance Notice Required',
+          'Occasional Friends Welcome',
+          'Frequent / Active Social Life',
+        ],
         message: '{VALUE} is not a valid guest policy',
       },
-      default: 'Occasional',
     },
     overnightGuests: {
       type: String,
-      required: [true, 'Overnight guest policy is required'],
+      default: 'With Notice',
       enum: {
-        values: ['Not Allowed', 'With Notice', 'Frequent'],
+        values: [
+          'Not Allowed',
+          'With Notice',
+          'Frequent',
+          'Flexible',
+          'Allowed with Advance Notice',
+          'Allowed Anytime',
+          'Not Permitted',
+        ],
         message: '{VALUE} is not a valid overnight guest policy',
       },
-      default: 'With Notice',
     },
     socialPreference: {
       type: String,
-      required: [true, 'Social preference is required'],
+      default: 'Balanced',
       enum: {
-        values: ['Quiet Retreat', 'Balanced', 'Social Hub'],
+        values: [
+          'Quiet Retreat',
+          'Balanced',
+          'Social Hub',
+          'Flexible',
+          'Quiet Sanctuary',
+          'Balanced Social Life',
+          'Active Social Hub',
+        ],
         message: '{VALUE} is not a valid social preference',
       },
-      default: 'Balanced',
     },
     workSchedule: {
       type: String,
@@ -131,10 +198,9 @@ const flexiblePreferencesSchema = new mongoose.Schema(
     },
     wfhDays: {
       type: Number,
-      required: [true, 'WFH days per week is required'],
+      default: 2,
       min: [0, 'WFH days must be between 0 and 7'],
       max: [7, 'WFH days must be between 0 and 7'],
-      default: 2,
     },
     studyHabits: {
       type: String,
@@ -142,39 +208,67 @@ const flexiblePreferencesSchema = new mongoose.Schema(
     },
     cookingHabit: {
       type: String,
-      required: [true, 'Cooking habit is required'],
+      default: 'Daily',
       enum: {
-        values: ['Daily', 'Occasional', 'Tiffin / Delivery'],
+        values: [
+          'Daily',
+          'Occasional',
+          'Tiffin / Delivery',
+          'Flexible',
+          'Daily Home Cooking',
+          'Light / Occasional Cooking',
+          'Tiffin / Dining Out',
+        ],
         message: '{VALUE} is not a valid cooking habit',
       },
-      default: 'Daily',
     },
     foodSharing: {
       type: String,
-      required: [true, 'Food sharing preference is required'],
+      default: 'Separate Groceries',
       enum: {
-        values: ['Separate Groceries', 'Shared Staples', 'Full Communal'],
+        values: [
+          'Separate Groceries',
+          'Shared Staples',
+          'Full Communal',
+          'Flexible',
+          'Separate Kitchen Supplies',
+          'Shared Common Staples',
+          'Fully Communal Groceries',
+        ],
         message: '{VALUE} is not a valid food sharing option',
       },
-      default: 'Separate Groceries',
     },
     personalSpace: {
       type: String,
-      required: [true, 'Personal space preference is required'],
+      default: 'High',
       enum: {
-        values: ['High', 'Balanced', 'Communal'],
+        values: [
+          'High',
+          'Balanced',
+          'Communal',
+          'Flexible',
+          'High (Value Independent Solitude)',
+          'Balanced (Mix of Private & Shared Time)',
+          'Communal (Thrive in Shared Spaces)',
+        ],
         message: '{VALUE} is not a valid personal space preference',
       },
-      default: 'High',
     },
     rulesStrictness: {
       type: String,
-      required: [true, 'House rules strictness is required'],
+      default: 'Moderate',
       enum: {
-        values: ['Strict Curfew', 'Moderate', 'Self-Managed'],
+        values: [
+          'Strict Curfew',
+          'Moderate',
+          'Self-Managed',
+          'Flexible',
+          'Strict Curfew & Formal House Rules',
+          'Moderate Society Rules',
+          'Relaxed / Self-Managed',
+        ],
         message: '{VALUE} is not a valid house rules strictness',
       },
-      default: 'Moderate',
     },
   },
   { _id: false }
@@ -184,45 +278,45 @@ const importanceWeightsSchema = new mongoose.Schema(
   {
     budget: {
       type: Number,
+      default: 5,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 5,
     },
     diet: {
       type: Number,
+      default: 4,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 4,
     },
     sleepSync: {
       type: Number,
+      default: 5,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 5,
     },
     cleanliness: {
       type: Number,
+      default: 4,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 4,
     },
     noise: {
       type: Number,
+      default: 4,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 4,
     },
     guests: {
       type: Number,
+      default: 3,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 3,
     },
     wfh: {
       type: Number,
+      default: 3,
       min: [1, 'Weight must be between 1 and 5'],
       max: [5, 'Weight must be between 1 and 5'],
-      default: 3,
     },
   },
   { _id: false }
@@ -236,19 +330,30 @@ const preferenceProfileSchema = new mongoose.Schema(
       required: [true, 'User reference is required'],
       unique: true,
     },
+    // The canonical 22 factors dictionary
+    factors: {
+      type: canonicalFactorsSchema,
+      default: () => ({}),
+    },
+    isComplete: {
+      type: Boolean,
+      default: false,
+    },
+    completedCount: {
+      type: Number,
+      default: 0,
+    },
+    // Categorized subdocuments for backwards compatibility
     hardConstraints: {
       type: hardConstraintsSchema,
-      required: [true, 'Hard constraints are required'],
       default: () => ({}),
     },
     flexiblePreferences: {
       type: flexiblePreferencesSchema,
-      required: [true, 'Flexible preferences are required'],
       default: () => ({}),
     },
     importanceWeights: {
       type: importanceWeightsSchema,
-      required: [true, 'Importance weights are required'],
       default: () => ({}),
     },
   },
@@ -264,8 +369,5 @@ const preferenceProfileSchema = new mongoose.Schema(
   }
 );
 
-const PreferenceProfile = mongoose.model(
-  'PreferenceProfile',
-  preferenceProfileSchema
-);
+const PreferenceProfile = mongoose.model('PreferenceProfile', preferenceProfileSchema);
 export default PreferenceProfile;
