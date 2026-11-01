@@ -105,15 +105,6 @@ const verifyOtpValidation = [
  */
 const resetPasswordWithOtpValidation = [
   body('email')
-    .trim()
-    .notEmpty()
-    .withMessage('Email is required')
-    .isEmail()
-    .withMessage('Please provide a valid email address'),
-  body('resetToken')
-    .trim()
-    .notEmpty()
-    .withMessage('Reset authorization token is required'),
     .optional()
     .trim()
     .isEmail()
@@ -147,7 +138,6 @@ const resetPasswordWithOtpValidation = [
 ];
 
 /**
- * Validation rules for legacy URL token password reset
  * Validation rules for legacy URL token or body token password reset
  * Supports both newPassword and password fields in body
  */
@@ -170,16 +160,6 @@ const resetPasswordValidation = [
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
 router.get('/me', protect, getMe);
-
-// OTP-Based Password Reset Routes
-router.post('/forgot-password', forgotPasswordValidation, forgotPassword);
-router.post('/verify-otp', verifyOtpValidation, verifyResetOTP);
-router.post('/reset-password-otp', resetPasswordWithOtpValidation, resetPasswordWithOTP);
-
-// Legacy URL Token Routes
-router.post('/reset-password/:token', resetPasswordValidation, resetPassword);
-router.put('/reset-password/:token', resetPasswordValidation, resetPassword);
-
 
 // Email Verification Routes
 router.post('/verify-email', verifyEmail);

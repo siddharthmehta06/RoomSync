@@ -83,76 +83,6 @@ export const ForgotPasswordPage = () => {
     }
   };
 
-  // Step 1: Request OTP
-  const handleRequestOtp = async (e) => {
-  // Step 2: Verify 6-digit OTP
-  const handleVerifyOtp = async (e) => {
-    e?.preventDefault();
-    setErrorMessage(null);
-    setSuccessInfo(null);
-
-    const cleanEmail = email.trim();
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      setErrorMessage('Please enter a valid registered email address.');
-    const cleanOtp = otp.trim();
-    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
-      setErrorMessage('Please enter the 6-digit numerical code sent to your email.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const data = await verifyResetOtpApi(email.trim(), cleanOtp);
-      setTempToken(data.tempToken);
-      setStep(3);
-    } catch (err) {
-      setErrorMessage(err.message || 'Invalid or expired OTP code.');
-      if (err.attemptsRemaining !== undefined) {
-        setAttemptsRemaining(err.attemptsRemaining);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 3: Submit New Password
-  const handleResetPassword = async (e) => {
-    e?.preventDefault();
-    setErrorMessage(null);
-
-    if (password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters long.');
-      return;
-    }
-
-    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*]/.test(password)) {
-      setErrorMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (!@#$%^&*).');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const res = await forgotPasswordApi(cleanEmail);
-
-      setStep(2);
-      setCountdown(60);
-      setAttemptsRemaining(5);
-
-      if (res.devMode?.simulatedOtp) {
-        setDevSimulatedOtp(res.devMode.simulatedOtp);
-      }
-    } catch (err) {
-      setErrorMessage(err.message || 'Failed to update password. Your reset session may have expired.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Step 2: Verify 6-digit OTP
   const handleVerifyOtp = async (e) => {
     e?.preventDefault();
@@ -323,7 +253,6 @@ export const ForgotPasswordPage = () => {
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Sign In</span>
-                <ArrowLeft className="w-3.5 h-3.5" /> Back to Login
               </Link>
             </div>
           </form>
