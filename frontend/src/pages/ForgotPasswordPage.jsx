@@ -53,18 +53,6 @@ export const ForgotPasswordPage = () => {
     return () => clearInterval(timer);
   }, [countdown]);
 
-  const validateEmail = (val) => {
-    const trimmed = val.trim();
-    if (!trimmed) {
-      return 'Email address cannot be empty. Please enter your email.';
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmed)) {
-      return 'Please provide a valid email format (e.g., name@domain.com).';
-    }
-    return null;
-  };
-
   // Step 1: Request OTP
   const handleRequestOtp = async (e) => {
     e?.preventDefault();
@@ -76,8 +64,6 @@ export const ForgotPasswordPage = () => {
       setErrorMessage('Please enter a valid registered email address.');
       return;
     }
-
-    const cleanEmail = email.trim().toLowerCase();
 
     try {
       setLoading(true);
@@ -91,10 +77,77 @@ export const ForgotPasswordPage = () => {
         setDevSimulatedOtp(res.devMode.simulatedOtp);
       }
     } catch (err) {
-      // In case of network errors or server exceptions
-      setErrorMessage(
-        err.message || 'Unable to process your request at this time. Please try again later.'
-      );
+      setErrorMessage(err.message || 'Unable to process your request. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 1: Request OTP
+  const handleRequestOtp = async (e) => {
+  // Step 2: Verify 6-digit OTP
+  const handleVerifyOtp = async (e) => {
+    e?.preventDefault();
+    setErrorMessage(null);
+    setSuccessInfo(null);
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMessage('Please enter a valid registered email address.');
+    const cleanOtp = otp.trim();
+    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      setErrorMessage('Please enter the 6-digit numerical code sent to your email.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const data = await verifyResetOtpApi(email.trim(), cleanOtp);
+      setTempToken(data.tempToken);
+      setStep(3);
+    } catch (err) {
+      setErrorMessage(err.message || 'Invalid or expired OTP code.');
+      if (err.attemptsRemaining !== undefined) {
+        setAttemptsRemaining(err.attemptsRemaining);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 3: Submit New Password
+  const handleResetPassword = async (e) => {
+    e?.preventDefault();
+    setErrorMessage(null);
+
+    if (password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password) || !/[!@#$%^&*]/.test(password)) {
+      setErrorMessage('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (!@#$%^&*).');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage('Passwords do not match.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await forgotPasswordApi(cleanEmail);
+
+      setStep(2);
+      setCountdown(60);
+      setAttemptsRemaining(5);
+
+      if (res.devMode?.simulatedOtp) {
+        setDevSimulatedOtp(res.devMode.simulatedOtp);
+      }
+    } catch (err) {
+      setErrorMessage(err.message || 'Failed to update password. Your reset session may have expired.');
     } finally {
       setLoading(false);
     }
@@ -257,7 +310,6 @@ export const ForgotPasswordPage = () => {
               variant="primary"
               size="lg"
               className="w-full justify-center"
-              icon={loading ? Loader2 : null}
               disabled={loading}
               icon={loading ? Loader2 : ArrowRight}
             >

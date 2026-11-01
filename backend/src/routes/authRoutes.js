@@ -13,6 +13,10 @@ import {
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import {
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+} from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -64,11 +68,6 @@ const loginValidation = [
   validateRequest,
 ];
 
-import {
-  forgotPasswordLimiter,
-  resetPasswordLimiter,
-} from '../middleware/rateLimiter.js';
-
 /**
  * Validation rules for forgot password request
  */
@@ -115,6 +114,22 @@ const resetPasswordWithOtpValidation = [
     .trim()
     .notEmpty()
     .withMessage('Reset authorization token is required'),
+    .optional()
+    .trim()
+    .isEmail()
+    .withMessage('Please provide a valid email address'),
+  body('resetToken')
+    .optional()
+    .trim(),
+  body('tempToken')
+    .optional()
+    .trim(),
+  body().custom((val, { req }) => {
+    if (!req.body.resetToken && !req.body.tempToken) {
+      throw new Error('Reset authorization token is required');
+    }
+    return true;
+  }),
   body('password')
     .notEmpty()
     .withMessage('New password is required')
@@ -133,6 +148,8 @@ const resetPasswordWithOtpValidation = [
 
 /**
  * Validation rules for legacy URL token password reset
+ * Validation rules for legacy URL token or body token password reset
+ * Supports both newPassword and password fields in body
  */
 const resetPasswordValidation = [
   body().custom((value, { req }) => {
@@ -149,7 +166,7 @@ const resetPasswordValidation = [
   validateRequest,
 ];
 
-// Mount endpoints
+// Core Auth Routes
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
 router.get('/me', protect, getMe);
@@ -162,5 +179,21 @@ router.post('/reset-password-otp', resetPasswordWithOtpValidation, resetPassword
 // Legacy URL Token Routes
 router.post('/reset-password/:token', resetPasswordValidation, resetPassword);
 router.put('/reset-password/:token', resetPasswordValidation, resetPassword);
+
+
+// Email Verification Routes
+router.post('/verify-email', verifyEmail);
+router.get('/verify-email', verifyEmail);
+router.post('/resend-verification', resendVerification);
+
+// OTP-Based Password Reset Routes
+router.post('/forgot-password', forgotPasswordLimiter, forgotPasswordValidation, forgotPassword);
+router.post('/verify-otp', verifyOtpValidation, verifyResetOTP);
+router.post('/reset-password-otp', resetPasswordLimiter, resetPasswordWithOtpValidation, resetPasswordWithOTP);
+
+// Link / Token-Based Password Reset Routes
+router.post('/reset-password', resetPasswordLimiter, resetPasswordValidation, resetPassword);
+router.post('/reset-password/:token', resetPasswordLimiter, resetPasswordValidation, resetPassword);
+router.put('/reset-password/:token', resetPasswordLimiter, resetPasswordValidation, resetPassword);
 
 export default router;
