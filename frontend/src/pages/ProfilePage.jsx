@@ -296,6 +296,29 @@ export const ProfilePage = () => {
             </div>
           </Card>
 
+          {/* Become a Room Owner Option for Seekers */}
+          {formData.role === 'seeker' && (
+            <Card className="p-5 bg-gradient-to-br from-brand-50 to-brand-100/40 border border-brand-200/80 rounded-2xl shadow-2xs space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-ink-primary">Become a Room Owner</h4>
+                  <p className="text-[11px] text-brand-800">List rooms & manage bookings</p>
+                </div>
+              </div>
+              <p className="text-xs text-ink-secondary leading-relaxed">
+                Want to list a vacant room or shared flat? To prevent rental scams and protect seekers, you must complete the government-issued owner identity verification.
+              </p>
+              <Link to="/owner/verify" className="block pt-1">
+                <Button variant="primary" size="sm" className="w-full justify-center">
+                  Verify & Become Owner
+                </Button>
+              </Link>
+            </Card>
+          )}
+
           {/* Verification Badge Info */}
           <Card className="p-5 bg-surface-100 border border-black/[0.05] text-xs text-ink-secondary space-y-2">
             <span className="font-semibold text-ink-primary block">Trust & Verification Policy</span>

@@ -8,9 +8,11 @@ import {
   deleteRoom,
   uploadListingImages,
   getMyListings,
+  getRoomQuestionnaire,
+  updateRoomQuestionnaire,
 } from '../controllers/roomController.js';
 import { getCompatibilityPreview } from '../controllers/matchController.js';
-import { protect, authorize, optionalAuth } from '../middleware/authMiddleware.js';
+import { protect, authorize, requireVerifiedOwner, optionalAuth } from '../middleware/authMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { handleListingImageUpload } from '../middleware/uploadMiddleware.js';
 import { upsertRoomReview } from '../controllers/roomReviewController.js';
@@ -72,38 +74,6 @@ const createRoomValidation = [
     .optional()
     .isInt({ min: 1, max: 36 })
     .withMessage('Minimum stay must be between 1 and 36 months'),
-  body('livingConditions.foodPreference')
-    .optional()
-    .isIn([
-      'Pure Vegetarian',
-      'Eggetarian / Flexible Non-veg',
-      'Non-Veg Welcome',
-    ])
-    .withMessage('Invalid food preference rule'),
-  body('livingConditions.smoking')
-    .optional()
-    .isIn(['Strictly Non-Smoking', 'Balcony Only', 'Allowed'])
-    .withMessage('Invalid smoking rule'),
-  body('livingConditions.alcohol')
-    .optional()
-    .isIn(['Teetotaler', 'Social Drinking OK', 'Allowed'])
-    .withMessage('Invalid alcohol rule'),
-  body('livingConditions.sleepSchedule')
-    .optional()
-    .isFloat({ min: 0.0, max: 23.5 })
-    .withMessage('Sleep schedule hour must be between 0.0 and 23.5'),
-  body('livingConditions.wakeSchedule')
-    .optional()
-    .isFloat({ min: 0.0, max: 23.5 })
-    .withMessage('Wake schedule hour must be between 0.0 and 23.5'),
-  body('livingConditions.cleanliness')
-    .optional()
-    .isFloat({ min: 1.0, max: 5.0 })
-    .withMessage('Cleanliness rating must be between 1.0 and 5.0'),
-  body('livingConditions.noiseTolerance')
-    .optional()
-    .isFloat({ min: 1.0, max: 5.0 })
-    .withMessage('Noise tolerance must be between 1.0 and 5.0'),
   validateRequest,
 ];
 
@@ -146,10 +116,13 @@ const updateRoomValidation = [
 ];
 
 router.get('/', getRooms);
+
+// Owner-only endpoints strictly guarded by requireVerifiedOwner
 router.post(
   '/upload-images',
   protect,
   authorize('owner', 'admin'),
+  requireVerifiedOwner,
   handleListingImageUpload,
   uploadListingImages
 );
@@ -160,6 +133,9 @@ router.get(
   getMyListings
 );
 router.get('/:id', optionalAuth, getRoomById);
+router.get('/:id/questionnaire', optionalAuth, getRoomQuestionnaire);
+router.put('/:id/questionnaire', protect, authorize('owner', 'admin'), requireVerifiedOwner, updateRoomQuestionnaire);
+
 router.post(
   '/:id/reviews',
   protect,
@@ -173,11 +149,12 @@ router.post(
   '/',
   protect,
   authorize('owner', 'admin'),
+  requireVerifiedOwner,
   createRoomValidation,
   createRoom
 );
 router.post('/:id/compatibility-preview', protect, getCompatibilityPreview);
-router.put('/:id', protect, updateRoomValidation, updateRoom);
-router.delete('/:id', protect, deleteRoom);
+router.put('/:id', protect, authorize('owner', 'admin'), requireVerifiedOwner, updateRoomValidation, updateRoom);
+router.delete('/:id', protect, authorize('owner', 'admin'), requireVerifiedOwner, deleteRoom);
 
 export default router;

@@ -58,6 +58,14 @@ const userSchema = new mongoose.Schema(
       },
       default: null,
     },
+    ownerVerificationStatus: {
+      type: String,
+      enum: {
+        values: ['Not Started', 'Pending', 'Verified', 'Rejected', 'Requires Resubmission'],
+        message: '{VALUE} is not a valid owner verification status',
+      },
+      default: 'Not Started',
+    },
     occupation: {
       type: String,
       trim: true,
@@ -94,6 +102,31 @@ const userSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    passwordResetOTP: {
+      type: String,
+      select: false,
+    },
+    passwordResetOTPExpires: {
+      type: Date,
+      select: false,
+    },
+    passwordResetAttempts: {
+      type: Number,
+      default: 0,
+      select: false,
+    },
+    passwordResetCooldown: {
+      type: Date,
+      select: false,
+    },
+    tempResetToken: {
+      type: String,
+      select: false,
+    },
+    tempResetTokenExpires: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -101,6 +134,8 @@ const userSchema = new mongoose.Schema(
       transform: (doc, ret) => {
         ret.id = ret._id.toString();
         delete ret.password;
+        delete ret.passwordResetOTP;
+        delete ret.tempResetToken;
         delete ret.__v;
         return ret;
       },
@@ -111,6 +146,7 @@ const userSchema = new mongoose.Schema(
 // Indexes
 userSchema.index({ phone: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ ownerVerificationStatus: 1 });
 
 /**
  * Pre-save middleware to hash password before persisting
@@ -135,23 +171,40 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
 };
 
 /**
- * Generate cryptographically secure random token, store hashed version in DB,
- * and return the unhashed plain token to be sent to user via reset link
+ * Generate cryptographically secure random token (legacy link method)
  */
 userSchema.methods.getResetPasswordToken = function () {
-  // Generate random 20-byte token as hex string
   const resetToken = crypto.randomBytes(20).toString('hex');
-
-  // Hash token using SHA-256 for secure database storage
   this.resetPasswordToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
-
-  // Set token expiration to 15 minutes from now
   this.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
-
   return resetToken;
+};
+
+/**
+ * Generate 6-digit random numeric OTP, hash it with SHA-256 for secure DB storage,
+ * and set 5-minute expiry and 60-second cooldown.
+ */
+userSchema.methods.createPasswordResetOTP = function () {
+  // Generate random 6-digit number (100000 - 999999)
+  const otp = crypto.randomInt(100000, 1000000).toString();
+
+  // Hash OTP for secure database persistence
+  this.passwordResetOTP = crypto
+    .createHash('sha256')
+    .update(otp)
+    .digest('hex');
+
+  // OTP valid for strictly 5 minutes
+  this.passwordResetOTPExpires = Date.now() + 5 * 60 * 1000;
+  // Reset verification attempts
+  this.passwordResetAttempts = 0;
+  // 60-second resend cooldown
+  this.passwordResetCooldown = Date.now() + 60 * 1000;
+
+  return otp;
 };
 
 const User = mongoose.model('User', userSchema);

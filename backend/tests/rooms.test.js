@@ -67,6 +67,8 @@ describe('RoomSync Room Listings API (/api/rooms)', () => {
     });
     otherOwnerToken = otherRes.body.data.token;
     otherOwnerId = otherRes.body.data.user.id;
+    await User.findByIdAndUpdate(ownerId, { ownerVerificationStatus: 'Verified', isVerified: true });
+    await User.findByIdAndUpdate(otherOwnerId, { ownerVerificationStatus: 'Verified', isVerified: true });
   });
 
   const sampleListingPayload = {

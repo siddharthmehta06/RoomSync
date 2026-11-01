@@ -79,6 +79,7 @@ describe('RoomSync Explainable Matching API (/api/matches & compatibility-previe
     });
     ownerToken = ownerRes.body.data.token;
     ownerId = ownerRes.body.data.user.id;
+    await User.findByIdAndUpdate(ownerId, { ownerVerificationStatus: 'Verified', isVerified: true });
 
     // 4. Save PreferenceProfile for Seeker 1
     await request(app)

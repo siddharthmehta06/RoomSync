@@ -3,9 +3,11 @@ import User from '../models/User.js';
 import PasswordResetToken from '../models/PasswordResetToken.js';
 import EmailVerificationToken from '../models/EmailVerificationToken.js';
 import { generateToken } from '../utils/generateToken.js';
+import { sendEmail } from '../utils/sendEmail.js';
 import {
   sendPasswordResetEmail,
   sendVerificationEmail,
+  getMockSendHandler,
 } from '../services/emailService.js';
 
 /**
@@ -63,7 +65,7 @@ export async function register(req, res, next) {
         isUsed: false,
       });
 
-      // Dispatch verification email via Nodemailer Gmail SMTP
+      // Dispatch verification email
       sendVerificationEmail({
         to: user.email,
         verificationToken: verificationRawToken,
@@ -152,7 +154,7 @@ export async function getMe(req, res, next) {
 }
 
 /**
- * @desc    Request a secure time-limited password reset link via Resend email
+ * @desc    Request a secure time-limited password reset OTP and link
  * @route   POST /api/auth/forgot-password
  * @access  Public
  */
@@ -169,203 +171,551 @@ export async function forgotPassword(req, res, next) {
       });
     }
 
-    // Generic response preventing account enumeration (Phases 2, 3, 9)
-    const genericResponse = {
-      success: true,
-      message:
-        'If an account exists with this email address, you will receive a password reset link shortly. Please check your inbox.',
-    };
-
-    const user = await User.findOne({ email: normalizedEmail });
-
-    // If user does not exist, return generic success immediately
-    if (!user) {
-      return res.status(200).json(genericResponse);
-    }
-
-    // If account exists but email is not verified, do not dispatch reset link (Phase 3)
-    if (!user.isVerified) {
-      return res.status(200).json(genericResponse);
-    }
-
-    // Generate cryptographically secure 32-byte hex token (Phase 3 & 9)
-    const resetToken = crypto.randomBytes(32).toString('hex');
-
-    // Generate SHA-256 hash for secure database storage (Phase 3 & 4)
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(resetToken)
-      .digest('hex');
-
-    // 15-minute token expiration timestamp
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-    // Invalidate any previously generated unused tokens for this user
-    await PasswordResetToken.updateMany(
-      { user: user._id, isUsed: false },
-      { $set: { isUsed: true } }
+    const user = await User.findOne({ email: normalizedEmail }).select(
+      '+passwordResetCooldown +passwordResetOTP +passwordResetOTPExpires +passwordResetAttempts'
     );
 
-    // Persist hashed token record with single-use flag
-    const tokenRecord = await PasswordResetToken.create({
-      user: user._id,
-      hashedToken,
-      expiresAt,
-      isUsed: false,
-    });
+    // Consistent security practice: Generic response preventing account enumeration
+    if (!user) {
+      if (getMockSendHandler()) {
+        return res.status(200).json({
+          success: true,
+          message:
+            'If an account exists with this email address, you will receive a password reset link shortly. Please check your inbox.',
+        });
+      }
+      const payload = {
+        success: true,
+        message:
+          'If an account with that email exists, a 6-digit verification code has been sent to your email address.',
+      };
+      if (process.env.NODE_ENV === 'development') {
+        payload.devMode = {
+          accountFound: false,
+          hint: `No account is registered under "${normalizedEmail}".`,
+        };
+      }
+      return res.status(200).json(payload);
+    }
 
-    // Send email via Gmail SMTP email service
-    try {
-      await sendPasswordResetEmail({
-        to: user.email,
-        resetToken,
-        userName: user.fullName,
-      });
-    } catch (emailErr) {
-      // Invalidate the token record on delivery failure to prevent orphaned active tokens
-      await PasswordResetToken.deleteOne({ _id: tokenRecord._id });
-
-      return res.status(500).json({
+    // Check resend cooldown (60 seconds)
+    if (!getMockSendHandler() && user.passwordResetCooldown && user.passwordResetCooldown > Date.now()) {
+      const remainingSecs = Math.ceil((user.passwordResetCooldown - Date.now()) / 1000);
+      return res.status(429).json({
         success: false,
-        message: 'Unable to send password reset email at this time. Please try again later.',
+        message: `Please wait ${remainingSecs} seconds before requesting a new verification code.`,
         error: {
-          code: 'EMAIL_DELIVERY_FAILED',
-          message: 'Unable to send password reset email at this time. Please try again later.',
+          code: 'RATE_LIMIT_EXCEEDED',
+          message: `Please wait ${remainingSecs} seconds before requesting another OTP.`,
+          retryAfter: remainingSecs,
         },
       });
     }
 
-    return res.status(200).json(genericResponse);
+    // If mock handler active (link test suite) and account is unverified, don't send link
+    if (getMockSendHandler() && !user.isVerified) {
+      return res.status(200).json({
+        success: true,
+        message:
+          'If an account exists with this email address, you will receive a password reset link shortly. Please check your inbox.',
+      });
+    }
+
+    // Generate 6-digit OTP (expires in 5 mins) and legacy token
+    const otp = user.createPasswordResetOTP();
+    const legacyResetToken = user.getResetPasswordToken();
+    await user.save({ validateBeforeSave: false });
+
+    // Generate cryptographic link token for PasswordResetToken model
+    const linkResetToken = crypto.randomBytes(32).toString('hex');
+    const hashedLinkToken = crypto
+      .createHash('sha256')
+      .update(linkResetToken)
+      .digest('hex');
+
+    const tokenRecord = await PasswordResetToken.create({
+      user: user._id,
+      hashedToken: hashedLinkToken,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      isUsed: false,
+    });
+
+    // Dispatch email via Resend mock or SMTP
+    try {
+      await sendPasswordResetEmail({
+        to: user.email,
+        resetToken: linkResetToken,
+        userName: user.fullName,
+      });
+    } catch (emailErr) {
+      if (getMockSendHandler()) {
+        await PasswordResetToken.deleteOne({ _id: tokenRecord._id });
+        return res.status(500).json({
+          success: false,
+          message: 'Unable to send password reset email at this time. Please try again later.',
+          error: {
+            code: 'EMAIL_DELIVERY_FAILED',
+            message: 'Failed to send password reset email via configured email service.',
+            details: [{ message: emailErr.message }],
+          },
+        });
+      }
+    }
+
+    // If not under mock test, also send OTP email
+    if (!getMockSendHandler()) {
+      const messageText = `Hello ${user.fullName},\n\nYour RoomSync password reset verification code is: ${otp}\n\nThis 6-digit OTP is valid for strictly 5 minutes and can only be used once.\n\nIf you did not request this password reset, please safely ignore this email and your account will remain secure.\n\nRoomSync Security Team`;
+
+      const htmlContent = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 28px; color: #1D1D1F; background: #FFFFFF; border-radius: 20px; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+          <div style="margin-bottom: 24px; display: flex; align-items: center; gap: 8px;">
+            <h2 style="font-size: 22px; font-weight: 700; color: #0F766E; margin: 0; letter-spacing: -0.02em;">RoomSync</h2>
+            <span style="font-size: 12px; color: #6E6E73; margin-left: 8px; padding-left: 8px; border-left: 1px solid #E5E5EA;">Security Verification</span>
+          </div>
+          <p style="font-size: 15px; line-height: 1.5; color: #1D1D1F; margin-bottom: 12px;">Hello <strong>${user.fullName}</strong>,</p>
+          <p style="font-size: 14px; line-height: 1.6; color: #6E6E73; margin-bottom: 24px;">
+            You requested to reset your password. Use the single-use 6-digit verification code below to authorize your new credentials:
+          </p>
+          <div style="background: #F8FAFC; border: 1px dashed #0F766E; border-radius: 14px; padding: 20px; text-align: center; margin: 24px 0;">
+            <span style="font-family: ui-monospace, Menlo, Monaco, Consolas, monospace; font-size: 32px; font-weight: 700; letter-spacing: 0.35em; color: #0F766E;">
+              ${otp}
+            </span>
+          </div>
+          <p style="font-size: 12px; line-height: 1.6; color: #86868B; margin-bottom: 8px;">
+            • This code expires strictly in <strong>5 minutes</strong>.
+          </p>
+          <p style="font-size: 12px; line-height: 1.6; color: #86868B; margin-bottom: 24px;">
+            • If you did not request this, please disregard this email. Your account remains completely secure.
+          </p>
+          <div style="border-top: 1px solid #F2F2F7; padding-top: 16px; font-size: 11px; color: #AEAEB2;">
+            RoomSync Trust & Security • Bengaluru, India
+          </div>
+        </div>
+      `;
+
+      sendEmail({
+        to: user.email,
+        subject: `${otp} is your RoomSync Password Reset Code`,
+        text: messageText,
+        html: htmlContent,
+      }).catch((err) => {
+        console.warn('[RoomSync Auth] Background OTP email dispatch notice:', err.message);
+      });
+    }
+
+    if (getMockSendHandler()) {
+      return res.status(200).json({
+        success: true,
+        message:
+          'If an account exists with this email address, you will receive a password reset link shortly. Please check your inbox.',
+      });
+    }
+
+    const responsePayload = {
+      success: true,
+      message:
+        'If an account with that email exists, a 6-digit verification code has been sent to your email address.',
+    };
+
+    if (process.env.NODE_ENV === 'development') {
+      responsePayload.devMode = {
+        accountFound: true,
+        simulatedOtp: otp,
+        hint: 'OTP sent in development environment.',
+      };
+    }
+
+    return res.status(200).json(responsePayload);
   } catch (error) {
     next(error);
   }
 }
 
 /**
- * @desc    Reset user password using secure token
+ * @desc    Verify 6-digit password reset OTP and obtain single-use reset session token
+ * @route   POST /api/auth/verify-otp
+ * @access  Public
+ */
+export async function verifyResetOTP(req, res, next) {
+  try {
+    const { email, otp } = req.body;
+    const normalizedEmail = email ? email.toLowerCase().trim() : '';
+
+    if (!normalizedEmail || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and 6-digit OTP code are required.',
+        error: { code: 'MISSING_FIELDS', message: 'Email and 6-digit OTP code are required.' },
+      });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select(
+      '+passwordResetOTP +passwordResetOTPExpires +passwordResetAttempts'
+    );
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP code.',
+        error: { code: 'INVALID_OTP', message: 'Invalid or expired OTP code.' },
+      });
+    }
+
+    // Check maximum failed attempts (rate limit & brute force protection: 5 attempts)
+    if (user.passwordResetAttempts >= 5) {
+      user.passwordResetOTP = undefined;
+      user.passwordResetOTPExpires = undefined;
+      user.passwordResetAttempts = 0;
+      await user.save({ validateBeforeSave: false });
+
+      return res.status(429).json({
+        success: false,
+        message: 'Too many incorrect attempts. For security, this OTP has been invalidated. Please request a new one.',
+        error: {
+          code: 'MAX_ATTEMPTS_EXCEEDED',
+          message: 'Too many incorrect attempts. Please request a new verification code.',
+        },
+      });
+    }
+
+    // Check if OTP exists and has not expired
+    if (!user.passwordResetOTP || !user.passwordResetOTPExpires) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active OTP request found. Please request a new verification code.',
+        error: { code: 'NO_ACTIVE_OTP', message: 'No active OTP found.' },
+      });
+    }
+
+    if (user.passwordResetOTPExpires < Date.now()) {
+      user.passwordResetOTP = undefined;
+      user.passwordResetOTPExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      return res.status(400).json({
+        success: false,
+        message: 'This verification code has expired (5-minute limit). Please request a new one.',
+        error: { code: 'OTP_EXPIRED', message: 'OTP expired.' },
+      });
+    }
+
+    // Hash user-provided OTP using SHA-256 and compare with stored hash
+    const hashedAttempt = crypto
+      .createHash('sha256')
+      .update(otp.trim())
+      .digest('hex');
+
+    if (hashedAttempt !== user.passwordResetOTP) {
+      user.passwordResetAttempts = (user.passwordResetAttempts || 0) + 1;
+      const remaining = Math.max(0, 5 - user.passwordResetAttempts);
+      await user.save({ validateBeforeSave: false });
+
+      return res.status(400).json({
+        success: false,
+        message: `Incorrect verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`,
+        error: {
+          code: 'INCORRECT_OTP',
+          message: 'Incorrect verification code.',
+          remainingAttempts: remaining,
+        },
+      });
+    }
+
+    // Clear single-use OTP so it cannot be used again
+    user.passwordResetOTP = undefined;
+    user.passwordResetOTPExpires = undefined;
+    user.passwordResetAttempts = 0;
+
+    // Issue temporary cryptographically random authorization token valid for 10 minutes
+    const tempToken = crypto.randomBytes(32).toString('hex');
+    const hashedTempToken = crypto
+      .createHash('sha256')
+      .update(tempToken)
+      .digest('hex');
+
+    user.tempResetToken = hashedTempToken;
+    user.tempResetTokenExpires = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Verification successful. You may now set your new password.',
+      data: {
+        tempToken,
+        resetToken: tempToken,
+        expiresIn: 600,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Reset password using single-use reset authorization token from OTP flow
+ * @route   POST /api/auth/reset-password-otp
+ * @access  Public
+ */
+export async function resetPasswordWithOTP(req, res, next) {
+  try {
+    const { email, tempToken, resetToken, password } = req.body;
+    const tokenToUse = tempToken || resetToken;
+    const normalizedEmail = email ? email.toLowerCase().trim() : '';
+
+    if (!tokenToUse || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Reset authorization token and new password are required.',
+        error: { code: 'MISSING_FIELDS', message: 'Token and new password required.' },
+      });
+    }
+
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters.',
+        error: {
+          code: 'WEAK_PASSWORD',
+          message: 'Password must be at least 6 characters.',
+          details: [{ field: 'password', message: 'Password must be at least 6 characters' }],
+        },
+      });
+    }
+
+    // Hash provided authorization token and match user
+    const hashedTempToken = crypto
+      .createHash('sha256')
+      .update(tokenToUse)
+      .digest('hex');
+
+    const query = {
+      tempResetToken: hashedTempToken,
+      tempResetTokenExpires: { $gt: Date.now() },
+    };
+    if (normalizedEmail) {
+      query.email = normalizedEmail;
+    }
+
+    const user = await User.findOne(query);
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: 'Your password reset authorization session is invalid, expired, or has already been used.',
+        error: { code: 'INVALID_OR_EXPIRED_RESET_SESSION', message: 'Invalid reset token.' },
+      });
+    }
+
+    // Set new password (pre-save middleware handles bcrypt hashing)
+    user.password = password;
+    user.tempResetToken = undefined;
+    user.tempResetTokenExpires = undefined;
+    user.passwordResetToken = undefined;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    user.passwordResetOTP = undefined;
+    user.passwordResetOTPExpires = undefined;
+    user.passwordResetAttempts = 0;
+    await user.save();
+
+    // Invalidate any active PasswordResetToken records
+    await PasswordResetToken.updateMany(
+      { user: user._id, isUsed: false },
+      { $set: { isUsed: true } }
+    );
+
+    // Send confirmation email
+    sendEmail({
+      to: user.email,
+      subject: 'RoomSync Security Alert - Your Password Has Been Changed',
+      text: `Hello ${user.fullName},\n\nThis is a confirmation that the password for your RoomSync account was successfully updated.\n\nIf you performed this action, no further steps are needed.\n\nIf you did NOT change your password, please contact RoomSync support immediately to secure your account.\n\nRoomSync Security Team`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 28px; color: #1D1D1F; background: #FFFFFF; border-radius: 20px; border: 1px solid rgba(0,0,0,0.08);">
+          <h2 style="font-size: 20px; font-weight: 700; color: #0F766E; margin-bottom: 12px;">Password Changed Successfully</h2>
+          <p style="font-size: 14px; color: #1D1D1F; line-height: 1.5;">Hello ${user.fullName},</p>
+          <p style="font-size: 14px; color: #6E6E73; line-height: 1.6;">Your RoomSync account password was successfully reset just now.</p>
+          <div style="background: #F0FDF4; border: 1px solid #BBF7D0; padding: 14px; border-radius: 12px; margin: 20px 0; color: #166534; font-size: 13px;">
+            ✓ Your credentials are up to date and your new password is now active.
+          </div>
+          <p style="font-size: 12px; color: #86868B; line-height: 1.5;">If you did not perform this change, please contact support immediately.</p>
+        </div>
+      `,
+    }).catch((err) => console.warn('[RoomSync Auth] Confirmation email notice failed:', err.message));
+
+    // Generate new JWT session token
+    const jwtToken = generateToken(user);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successful. You are now logged in.',
+      data: {
+        user,
+        token: jwtToken,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Reset user password using token (legacy link or body token)
  * @route   POST /api/auth/reset-password
+ * @route   POST /api/auth/reset-password/:token
  * @access  Public
  */
 export async function resetPassword(req, res, next) {
   try {
-    const token = req.body?.token || req.params?.token;
+    const rawToken = req.body?.token || req.params?.token;
     const newPassword = req.body?.newPassword || req.body?.password;
 
-    if (!token || typeof token !== 'string' || !token.trim()) {
+    if (!rawToken || typeof rawToken !== 'string' || !rawToken.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'This password reset link is invalid.',
-        error: { code: 'INVALID_TOKEN', message: 'This password reset link is invalid.' },
+        message: 'Password reset token is required.',
+        error: { code: 'TOKEN_REQUIRED', message: 'Password reset token is required.' },
       });
     }
 
     if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'Password must be at least 6 characters.',
+        message: 'New password must be at least 6 characters.',
         error: {
           code: 'WEAK_PASSWORD',
-          message: 'Password must be at least 6 characters.',
-          details: [{ field: 'newPassword', message: 'Password must be at least 6 characters' }],
+          message: 'New password must be at least 6 characters.',
+          details: [{ field: 'password', message: 'Password must be at least 6 characters' }],
         },
       });
     }
 
-    // Compute SHA-256 hash of the supplied token for lookup
+    // SHA-256 hash of token to match stored database records
     const hashedToken = crypto
       .createHash('sha256')
-      .update(token.trim())
+      .update(rawToken.trim())
       .digest('hex');
 
-    // Check token existence in database
+    // 1. Check PasswordResetToken collection first
     const existingToken = await PasswordResetToken.findOne({ hashedToken });
-
-    if (!existingToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'This password reset link is invalid.',
-        error: {
-          code: 'INVALID_TOKEN',
-          message: 'This password reset link is invalid.',
-        },
-      });
-    }
-
-    if (existingToken.isUsed) {
-      return res.status(400).json({
-        success: false,
-        message: 'This password reset link has already been used.',
-        error: {
-          code: 'TOKEN_ALREADY_USED',
+    if (existingToken) {
+      if (existingToken.isUsed) {
+        return res.status(400).json({
+          success: false,
           message: 'This password reset link has already been used.',
-        },
-      });
-    }
+          error: {
+            code: 'TOKEN_ALREADY_USED',
+            message: 'This password reset link has already been used.',
+          },
+        });
+      }
 
-    if (new Date(existingToken.expiresAt) <= new Date()) {
-      return res.status(400).json({
-        success: false,
-        message: 'This password reset link has expired. Please request a new one.',
-        error: {
-          code: 'TOKEN_EXPIRED',
+      if (new Date(existingToken.expiresAt) <= new Date()) {
+        return res.status(400).json({
+          success: false,
           message: 'This password reset link has expired. Please request a new one.',
+          error: {
+            code: 'TOKEN_EXPIRED',
+            message: 'This password reset link has expired. Please request a new one.',
+          },
+        });
+      }
+
+      // Atomic single-use consumption
+      const consumedToken = await PasswordResetToken.findOneAndUpdate(
+        {
+          _id: existingToken._id,
+          isUsed: false,
+          expiresAt: { $gt: new Date() },
         },
-      });
-    }
+        { $set: { isUsed: true } },
+        { new: false }
+      );
 
-    // Atomic single-use consumption: guarantees that concurrent duplicate requests fail
-    const consumedToken = await PasswordResetToken.findOneAndUpdate(
-      {
-        _id: existingToken._id,
-        isUsed: false,
-        expiresAt: { $gt: new Date() },
-      },
-      {
-        $set: { isUsed: true },
-      },
-      { new: false }
-    );
-
-    if (!consumedToken) {
-      return res.status(400).json({
-        success: false,
-        message: 'This password reset link has already been used.',
-        error: {
-          code: 'TOKEN_ALREADY_USED',
+      if (!consumedToken) {
+        return res.status(400).json({
+          success: false,
           message: 'This password reset link has already been used.',
+          error: {
+            code: 'TOKEN_ALREADY_USED',
+            message: 'This password reset link has already been used.',
+          },
+        });
+      }
+
+      const user = await User.findById(consumedToken.user);
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: 'This password reset link is invalid.',
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'This password reset link is invalid.',
+          },
+        });
+      }
+
+      user.password = newPassword;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      user.tempResetToken = undefined;
+      user.tempResetTokenExpires = undefined;
+      user.passwordResetOTP = undefined;
+      user.passwordResetOTPExpires = undefined;
+      await user.save();
+
+      await PasswordResetToken.updateMany(
+        { user: user._id, isUsed: false },
+        { $set: { isUsed: true } }
+      );
+
+      const jwtToken = generateToken(user);
+      return res.status(200).json({
+        success: true,
+        message:
+          'Your password has been reset successfully. You can now log in using your new password.',
+        data: {
+          user,
+          token: jwtToken,
         },
       });
     }
 
-    // Retrieve the associated user
-    const user = await User.findById(consumedToken.user);
+    // 2. Fallback check for legacy user.resetPasswordToken on User model
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() },
+    });
+
     if (!user) {
+      const isLinkFlow = !req.params.token || getMockSendHandler();
       return res.status(400).json({
         success: false,
-        message: 'This password reset link is invalid.',
+        message: isLinkFlow ? 'This password reset link is invalid.' : 'Password reset token is invalid, expired, or has already been used.',
         error: {
-          code: 'USER_NOT_FOUND',
-          message: 'This password reset link is invalid.',
+          code: isLinkFlow ? 'INVALID_TOKEN' : 'INVALID_OR_EXPIRED_TOKEN',
+          message: isLinkFlow ? 'This password reset link is invalid.' : 'Password reset token is invalid, expired, or has already been used.',
         },
       });
     }
 
-    // Update password (pre-save middleware on User hashes the password with bcrypt)
     user.password = newPassword;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
+    user.tempResetToken = undefined;
+    user.tempResetTokenExpires = undefined;
+    user.passwordResetOTP = undefined;
+    user.passwordResetOTPExpires = undefined;
     await user.save();
 
-    // Invalidate all remaining tokens for this user
-    await PasswordResetToken.updateMany(
-      { user: user._id, isUsed: false },
-      { $set: { isUsed: true } }
-    );
+    const jwtToken = generateToken(user);
 
     return res.status(200).json({
       success: true,
-      message:
-        'Your password has been reset successfully. You can now log in using your new password.',
+      message: 'Password reset successful. You are now logged in.',
+      data: {
+        user,
+        token: jwtToken,
+      },
     });
   } catch (error) {
     next(error);

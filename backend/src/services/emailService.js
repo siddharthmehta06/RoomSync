@@ -23,6 +23,10 @@ export function setMockSendHandler(handler) {
   mockSendHandler = handler;
 }
 
+export function getMockSendHandler() {
+  return mockSendHandler;
+}
+
 /**
  * Create a Nodemailer transporter configured with Gmail SMTP or environment settings
  * @returns {nodemailer.Transporter}

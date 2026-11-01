@@ -649,6 +649,118 @@ export async function fetchPreferences(customToken) {
   return data.data;
 }
 
+/**
+ * Fetch the 22-factor questionnaire and completion status for the current seeker
+ */
+export async function fetchSeekerQuestionnaire(customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/preferences`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to load seeker questionnaire.');
+  }
+
+  return {
+    profile: data.data,
+    factors: data.data?.factors || {},
+    completion: data.completion || {
+      completedCount: 0,
+      totalFactors: 22,
+      isComplete: false,
+      progressPercentage: 0,
+      missingFactors: [],
+    },
+  };
+}
+
+/**
+ * Save partial draft or complete 22-factor questionnaire for the current seeker
+ */
+export async function saveSeekerQuestionnaire(factors, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/preferences`, {
+    method: 'PUT',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ factors }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errorMsg = data.error?.message || data.message || 'Failed to save questionnaire responses.';
+    const err = new Error(errorMsg);
+    err.details = data.error?.details || [];
+    err.code = data.error?.code;
+    throw err;
+  }
+
+  return {
+    profile: data.data,
+    factors: data.data?.factors || factors,
+    completion: data.completion || {},
+  };
+}
+
+/**
+ * Pre-validate 22-factor questionnaire answers on the backend without saving
+ */
+export async function validateSeekerQuestionnaire(factors, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/preferences/validate`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ factors }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Validation request failed.');
+  }
+
+  return data;
+}
+
+/**
+ * Fetch a specific room listing questionnaire
+ */
+export async function fetchRoomQuestionnaire(roomId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/rooms/${roomId}/questionnaire`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to load listing questionnaire.');
+  }
+
+  return data.data;
+}
+
+/**
+ * Update a specific room listing questionnaire
+ */
+export async function updateRoomQuestionnaire(roomId, questionnaire, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/rooms/${roomId}/questionnaire`, {
+    method: 'PUT',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ questionnaire }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errorMsg = data.error?.message || data.message || 'Failed to update listing questionnaire.';
+    const err = new Error(errorMsg);
+    err.details = data.error?.details || [];
+    throw err;
+  }
+
+  return data.data;
+}
+
 export async function savePreferencesApi(preferencesData, customToken) {
   const token = customToken || getAuthToken();
   const res = await fetch(`${API_BASE_URL}/preferences`, {
@@ -764,39 +876,6 @@ export async function confirmBookingApi(bookingId, customToken) {
   return data.data;
 }
 
-// ==========================================
-// Password Reset API
-// ==========================================
-
-export async function forgotPasswordApi(email) {
-  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error?.message || data.message || 'Failed to request password reset.');
-  }
-
-  return data;
-}
-
-export async function resetPasswordApi(token, newPassword) {
-  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token, newPassword }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error?.message || data.message || 'Password reset failed.');
-  }
-
-  return data;
-}
 
 export async function verifyEmailApi(token) {
   const res = await fetch(`${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`, {
@@ -890,3 +969,236 @@ export async function updateVisitStatusApi(visitId, status, ownerResponseNote, c
   return data.data;
 }
 
+
+
+// ==========================================
+// Password Reset API (OTP Based)
+// ==========================================
+
+export async function forgotPasswordApi(email) {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to request password reset.');
+  }
+
+  return data;
+}
+
+export async function verifyResetOtpApi(email, otp) {
+  const res = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error?.message || data.message || 'Invalid or expired OTP.');
+    err.code = data.error?.code;
+    err.attemptsRemaining = data.error?.attemptsRemaining;
+    throw err;
+  }
+
+  return data.data; // { tempToken }
+}
+
+export async function resetPasswordWithOtpApi(tempToken, password) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tempToken, password }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Password reset failed.');
+  }
+
+  if (data.data?.token) {
+    setAuthToken(data.data.token);
+    setAuthUser(data.data.user);
+  }
+
+  return data.data;
+}
+
+// ==========================================
+// Owner Verification & RBAC API
+// ==========================================
+
+export async function fetchMyVerificationStatusApi(customToken) {
+  const token = customToken || getAuthToken();
+  if (!token) return null;
+
+  const res = await fetch(`${API_BASE_URL}/verification/me`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch verification status.');
+  }
+
+  return data.data;
+}
+
+export async function submitOwnerVerificationApi(verificationData, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/verification/submit`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify(verificationData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to submit identity verification.');
+  }
+
+  return data.data;
+}
+
+export async function becomeOwnerApi(customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/verification/become-owner`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to initiate owner transition.');
+  }
+
+  return data.data;
+}
+
+// ==========================================
+// Booking Request & Mutual Digital Agreement API
+// ==========================================
+
+export async function createBookingRequestApi(requestData, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/request`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify(requestData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error?.message || data.message || 'Failed to send booking request.');
+    err.code = data.error?.code;
+    throw err;
+  }
+
+  return data.data;
+}
+
+export async function respondBookingRequestApi(bookingId, action, rejectionReason, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}/respond`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ action, rejectionReason }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to respond to booking request.');
+  }
+
+  return data.data;
+}
+
+export async function fetchAgreementByIdApi(agreementId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/agreements/${agreementId}`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch agreement details.');
+  }
+
+  return data.data;
+}
+
+export async function fetchAgreementByBookingApi(bookingId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/agreements/booking/${bookingId}`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch agreement.');
+  }
+
+  return data.data;
+}
+
+export async function signAgreementApi(agreementId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/agreements/${agreementId}/sign`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ accepted: true }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to sign agreement.');
+  }
+
+  return data.data;
+}
+
+export async function downloadAgreementPdfApi(agreementId, agreementNumber, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/agreements/${agreementId}/pdf`, {
+    headers: getAuthHeaders(token),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || errorData.message || 'Failed to download agreement PDF');
+  }
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `RoomSync_Agreement_${agreementNumber || agreementId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function resetPasswordApi(token, password) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password/${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Password reset failed.');
+  }
+
+  if (data.data?.token) {
+    setAuthToken(data.data.token);
+    setAuthUser(data.data.user);
+  }
+
+  return data.data;
+}

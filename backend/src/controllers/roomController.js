@@ -1,3 +1,4 @@
+import { validate22Factors } from '../utils/factorValidation.js';
 import mongoose from 'mongoose';
 import RoomListing from '../models/RoomListing.js';
 import VisitRequest from '../models/VisitRequest.js';
@@ -265,6 +266,30 @@ export async function createRoom(req, res, next) {
       });
     }
 
+    // If questionnaire is explicitly provided for listing, validate completion of all 22 factors
+    let isQuestionnaireComplete = true;
+    let questionnaireCompletedCount = 22;
+    const incomingQ = req.body.questionnaire || req.body.livingConditions;
+
+    if (req.body.questionnaire !== undefined) {
+      const valResult = validate22Factors(req.body.questionnaire, { requireAll: true });
+      if (!valResult.isComplete) {
+        return res.status(400).json({
+          success: false,
+          message: 'All 22 living condition factors must be completed before publishing the listing.',
+          error: {
+            code: 'QUESTIONNAIRE_INCOMPLETE',
+            message: 'All 22 living condition factors must be completed before publishing the listing.',
+            completedCount: valResult.completedCount,
+            totalFactors: 22,
+            missingFactors: valResult.missingFactors,
+          },
+        });
+      }
+      isQuestionnaireComplete = valResult.isComplete;
+      questionnaireCompletedCount = valResult.completedCount;
+    }
+
     const room = await RoomListing.create({
       owner: req.user._id, // Enforce server-assigned owner
       title: title ? title.trim() : '',
@@ -285,7 +310,10 @@ export async function createRoom(req, res, next) {
       minStayMonths: minStayMonths !== undefined ? Number(minStayMonths) : 6,
       images: Array.isArray(images) ? images : [],
       amenities: Array.isArray(amenities) ? amenities : [],
-      livingConditions: livingConditions || {},
+      livingConditions: livingConditions || req.body.questionnaire || {},
+      questionnaire: req.body.questionnaire || livingConditions || {},
+      isQuestionnaireComplete,
+      questionnaireCompletedCount,
       status: 'active',
     });
 
@@ -548,6 +576,111 @@ export async function getMyListings(req, res, next) {
       meta: {
         total: rooms.length,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Get 22-factor questionnaire for a specific room listing
+ * @route   GET /api/rooms/:id/questionnaire
+ * @access  Public / Optional Auth
+ */
+export async function getRoomQuestionnaire(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room listing not found.',
+        error: { code: 'ROOM_NOT_FOUND', message: 'Room listing not found.' },
+      });
+    }
+
+    const room = await RoomListing.findById(id);
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room listing not found.',
+        error: { code: 'ROOM_NOT_FOUND', message: 'Room listing not found.' },
+      });
+    }
+
+    const questionnaireData = room.questionnaire && Object.keys(room.questionnaire).length > 0
+      ? room.questionnaire
+      : room.livingConditions || {};
+
+    const completion = validate22Factors(questionnaireData);
+
+    res.status(200).json({
+      success: true,
+      data: questionnaireData,
+      completion,
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * @desc    Update 22-factor questionnaire for a specific room listing
+ * @route   PUT /api/rooms/:id/questionnaire
+ * @access  Private (Owner / Admin)
+ */
+export async function updateRoomQuestionnaire(req, res, next) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room listing not found.',
+        error: { code: 'ROOM_NOT_FOUND', message: 'Room listing not found.' },
+      });
+    }
+
+    const room = await RoomListing.findById(id);
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: 'Room listing not found.',
+        error: { code: 'ROOM_NOT_FOUND', message: 'Room listing not found.' },
+      });
+    }
+
+    if (room.owner.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to update this listing questionnaire.',
+        error: { code: 'NOT_LISTING_OWNER', message: 'You are not authorized to update this listing.' },
+      });
+    }
+
+    const incoming = req.body.questionnaire || req.body.factors || req.body;
+    const existingQ = room.questionnaire ? (room.questionnaire.toObject ? room.questionnaire.toObject() : room.questionnaire) : {};
+    const mergedQ = { ...existingQ, ...incoming };
+
+    const valResult = validate22Factors(mergedQ, { requireAll: false });
+    if (!valResult.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid values in questionnaire.',
+        error: { code: 'INVALID_FACTOR_VALUE', details: valResult.errors },
+      });
+    }
+
+    room.questionnaire = mergedQ;
+    room.livingConditions = { ...(room.livingConditions ? room.livingConditions.toObject() : {}), ...mergedQ };
+    room.isQuestionnaireComplete = valResult.isComplete;
+    room.questionnaireCompletedCount = valResult.completedCount;
+
+    await room.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Room questionnaire updated successfully.',
+      data: room.questionnaire,
+      completion: valResult,
     });
   } catch (error) {
     next(error);
