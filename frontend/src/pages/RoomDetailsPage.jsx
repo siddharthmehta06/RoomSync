@@ -273,6 +273,10 @@ export const RoomDetailsPage = () => {
   const rawPhone = room.owner?.phone || '';
   const cleanPhone = rawPhone.replace(/[^0-9+]/g, '');
   const formattedPhone = rawPhone ? (rawPhone.startsWith('+') ? rawPhone : `+91 ${rawPhone}`) : null;
+  const currentUserId = user?._id || user?.id;
+  const roomOwnerId = room.owner?._id || room.owner?.id || (typeof room.owner === 'string' ? room.owner : null);
+  const isOwnerOfListing = Boolean(currentUserId && roomOwnerId && String(currentUserId) === String(roomOwnerId));
+  const isReservedOrOccupied = room.status === 'reserved' || room.status === 'occupied';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
@@ -316,6 +320,12 @@ export const RoomDetailsPage = () => {
             )}
             <Badge variant="teal">{room.furnishing}</Badge>
             <Badge variant="neutral">{room.roomType}</Badge>
+            {room.status === 'reserved' && (
+              <Badge variant="amber" className="bg-amber-100 text-amber-800 border-amber-300">Reserved</Badge>
+            )}
+            {room.status === 'occupied' && (
+              <Badge variant="rose" className="bg-rose-100 text-rose-800 border-rose-300">Occupied</Badge>
+            )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-ink-primary">
             {room.title}
@@ -352,14 +362,35 @@ export const RoomDetailsPage = () => {
         </div>
 
         {/* Pricing Summary */}
-        <div className="text-left md:text-right bg-surface-100 md:bg-transparent p-4 md:p-0 rounded-2xl">
-          <div className="text-2xl sm:text-3xl font-semibold text-ink-primary">
-            ₹{room.rent.toLocaleString('en-IN')}
-            <span className="text-xs font-normal text-ink-secondary"> / month</span>
+        <div className="text-left md:text-right bg-surface-100 md:bg-transparent p-4 md:p-0 rounded-2xl flex flex-col md:items-end justify-between">
+          <div>
+            <div className="text-2xl sm:text-3xl font-semibold text-ink-primary">
+              ₹{room.rent.toLocaleString('en-IN')}
+              <span className="text-xs font-normal text-ink-secondary"> / month</span>
+            </div>
+            <p className="text-xs text-ink-tertiary mt-0.5">
+              +₹{room.maintenance.toLocaleString('en-IN')} maint · Deposit: ₹{room.deposit.toLocaleString('en-IN')}
+            </p>
           </div>
-          <p className="text-xs text-ink-tertiary mt-0.5">
-            +₹{room.maintenance.toLocaleString('en-IN')} maint · Deposit: ₹{room.deposit.toLocaleString('en-IN')}
-          </p>
+          {!isOwnerOfListing && !isReservedOrOccupied && (
+            <div className="mt-3 hidden sm:block">
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-teal-800 hover:bg-teal-900 text-white shadow-xs"
+                icon={FileCheck}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    navigate(`/login?redirect=/rooms/${id}`);
+                    return;
+                  }
+                  setIsBookingModalOpen(true);
+                }}
+              >
+                Send Booking Request
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -925,7 +956,15 @@ export const RoomDetailsPage = () => {
                 Request a Visit
               </Button>
 
-              {user?.role !== 'owner' ? (
+              {isOwnerOfListing ? (
+                <div className="p-3 text-center rounded-xl bg-surface-100 text-xs text-ink-tertiary">
+                  You are the owner of this listing.
+                </div>
+              ) : isReservedOrOccupied ? (
+                <div className="p-3 text-center rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800 font-medium">
+                  This room is currently {room?.status}. Booking requests are closed.
+                </div>
+              ) : (
                 <Button 
                   variant="primary" 
                   className="w-full justify-center bg-teal-800 hover:bg-teal-900 text-white shadow-xs" 
@@ -940,10 +979,6 @@ export const RoomDetailsPage = () => {
                 >
                   Send Booking Request
                 </Button>
-              ) : (
-                <div className="p-3 text-center rounded-xl bg-surface-100 text-xs text-ink-tertiary">
-                  You are viewing this listing as an Owner.
-                </div>
               )}
             </div>
           </div>

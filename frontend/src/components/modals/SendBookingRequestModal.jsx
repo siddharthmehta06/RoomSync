@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Calendar, 
@@ -13,30 +13,58 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
-import { createBookingRequestApi } from '../../services/api';
+import { createBookingRequestApi, getAuthToken } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export const SendBookingRequestModal = ({ isOpen, onClose, room, onRequestSubmitted }) => {
   const navigate = useNavigate();
-  if (!isOpen || !room) return null;
 
-  // Default move-in date
-  const today = new Date().toISOString().split('T')[0];
-  const defaultMoveIn = room.availableFrom && !isNaN(new Date(room.availableFrom).getTime())
-    ? new Date(room.availableFrom).toISOString().split('T')[0]
-    : today;
+  const getTodayDate = () => new Date().toISOString().split('T')[0];
 
-  const [moveInDate, setMoveInDate] = useState(defaultMoveIn);
-  const [stayDuration, setStayDuration] = useState(room.minStayMonths || 6);
+  const calculateDefaultMoveIn = () => {
+    const today = getTodayDate();
+    if (!room?.availableFrom) return today;
+    const parsed = new Date(room.availableFrom);
+    if (isNaN(parsed.getTime())) return today;
+    const dateStr = parsed.toISOString().split('T')[0];
+    return dateStr >= today ? dateStr : today;
+  };
+
+  const [moveInDate, setMoveInDate] = useState(getTodayDate);
+  const [stayDuration, setStayDuration] = useState(6);
   const [occupantsCount, setOccupantsCount] = useState(1);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
+  // Synchronize modal state whenever opened
+  useEffect(() => {
+    if (isOpen && room) {
+      setMoveInDate(calculateDefaultMoveIn());
+      setStayDuration(room.minStayMonths || 6);
+      setOccupantsCount(1);
+      setMessage('');
+      setLoading(false);
+      setSuccess(false);
+      setErrorMessage(null);
+    }
+  }, [isOpen, room]);
+
+  // Hook calls complete - now safe to return null if closed or room not ready
+  if (!isOpen || !room) return null;
+
+  const today = getTodayDate();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    const token = getAuthToken();
+    if (!token) {
+      navigate(`/login?redirect=/rooms/${room._id || room.id}`);
+      return;
+    }
 
     if (!moveInDate) {
       setErrorMessage('Please select a proposed move-in date.');
@@ -59,7 +87,9 @@ export const SendBookingRequestModal = ({ isOpen, onClose, room, onRequestSubmit
         onRequestSubmitted();
       }
     } catch (err) {
-      if (err.code === 'ROOM_ALREADY_RESERVED') {
+      if (err.code === 'ALREADY_RESERVED_BY_YOU') {
+        setErrorMessage('You already have an active booking request for this room.');
+      } else if (err.code === 'DUPLICATE_ACTIVE_BOOKING' || err.code === 'ROOM_ALREADY_RESERVED') {
         setErrorMessage('This room is currently reserved or occupied. Please explore other listings.');
       } else if (err.code === 'CANNOT_BOOK_OWN_LISTING') {
         setErrorMessage('You cannot send a booking request for your own listing.');
@@ -273,4 +303,3 @@ export const SendBookingRequestModal = ({ isOpen, onClose, room, onRequestSubmit
     </div>
   );
 };
-

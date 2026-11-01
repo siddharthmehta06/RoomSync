@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Calendar, 
@@ -14,31 +14,44 @@ import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { createVisitRequestApi } from '../../services/api';
 
-export const RequestVisitModal = ({ isOpen, onClose, room, owner, onVisitCreated }) => {
-  if (!isOpen || !room) return null;
+const TIME_SLOTS = [
+  '09:00 AM - 10:00 AM',
+  '10:00 AM - 11:00 AM',
+  '11:00 AM - 12:00 PM',
+  '02:00 PM - 03:00 PM',
+  '04:00 PM - 05:00 PM',
+  '05:30 PM - 06:30 PM',
+  '07:00 PM - 08:00 PM',
+];
 
-  // Default to tomorrow
+const getTomorrowString = () => {
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const minDate = new Date().toISOString().split('T')[0];
-  const defaultDate = tomorrow.toISOString().split('T')[0];
+  return tomorrow.toISOString().split('T')[0];
+};
 
-  const [visitDate, setVisitDate] = useState(defaultDate);
+export const RequestVisitModal = ({ isOpen, onClose, room, owner, onVisitCreated }) => {
+  const minDate = new Date().toISOString().split('T')[0];
+
+  const [visitDate, setVisitDate] = useState(getTomorrowString);
   const [visitTime, setVisitTime] = useState('11:00 AM - 12:00 PM');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
 
-  const timeSlots = [
-    '09:00 AM - 10:00 AM',
-    '10:00 AM - 11:00 AM',
-    '11:00 AM - 12:00 PM',
-    '02:00 PM - 03:00 PM',
-    '04:00 PM - 05:00 PM',
-    '05:30 PM - 06:30 PM',
-    '07:00 PM - 08:00 PM',
-  ];
+  useEffect(() => {
+    if (isOpen) {
+      setVisitDate(getTomorrowString());
+      setVisitTime('11:00 AM - 12:00 PM');
+      setMessage('');
+      setLoading(false);
+      setSuccess(false);
+      setErrorMessage(null);
+    }
+  }, [isOpen, room]);
+
+  if (!isOpen || !room) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -224,7 +237,7 @@ export const RequestVisitModal = ({ isOpen, onClose, room, owner, onVisitCreated
                   onChange={(e) => setVisitTime(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-surface-300 text-xs text-ink-primary bg-surface-50 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 >
-                  {timeSlots.map((slot) => (
+                  {TIME_SLOTS.map((slot) => (
                     <option key={slot} value={slot}>
                       {slot}
                     </option>
