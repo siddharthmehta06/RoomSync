@@ -877,36 +877,6 @@ export async function confirmBookingApi(bookingId, customToken) {
 }
 
 
-export async function verifyEmailApi(token) {
-  const res = await fetch(`${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    const error = new Error(data.error?.message || data.message || 'Email verification failed.');
-    error.code = data.error?.code;
-    throw error;
-  }
-
-  return data;
-}
-
-export async function resendVerificationApi(email) {
-  const res = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error?.message || data.message || 'Failed to resend verification link.');
-  }
-
-  return data;
-}
 
 // ==========================================
 // Property Visit Requests API
@@ -964,6 +934,199 @@ export async function updateVisitStatusApi(visitId, status, ownerResponseNote, c
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.error?.message || data.message || 'Failed to update visit status.');
+  }
+
+  return data.data;
+}
+
+
+
+// ==========================================
+// Password Reset API (OTP Based)
+// ==========================================
+
+export async function forgotPasswordApi(email) {
+  const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to request password reset.');
+  }
+
+  return data;
+}
+
+export async function verifyResetOtpApi(email, otp) {
+  const res = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error?.message || data.message || 'Invalid or expired OTP.');
+    err.code = data.error?.code;
+    err.attemptsRemaining = data.error?.attemptsRemaining;
+    throw err;
+  }
+
+  return data.data; // { tempToken }
+}
+
+export async function resetPasswordWithOtpApi(tempToken, password) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tempToken, password }),
+export async function resetPasswordApi(token, newPassword) {
+  const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Password reset failed.');
+  }
+
+  return data;
+}
+
+export async function verifyEmailApi(token) {
+  const res = await fetch(`${API_BASE_URL}/auth/verify-email?token=${encodeURIComponent(token)}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const error = new Error(data.error?.message || data.message || 'Email verification failed.');
+    error.code = data.error?.code;
+    throw error;
+  }
+
+  return data;
+}
+
+export async function resendVerificationApi(email) {
+  const res = await fetch(`${API_BASE_URL}/auth/resend-verification`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to resend verification link.');
+  }
+
+  return data;
+}
+
+// ==========================================
+// Owner Verification & RBAC API
+// ==========================================
+
+export async function fetchMyVerificationStatusApi(customToken) {
+  const token = customToken || getAuthToken();
+  if (!token) return null;
+
+  const res = await fetch(`${API_BASE_URL}/verification/me`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch verification status.');
+  }
+
+  return data.data;
+}
+
+export async function submitOwnerVerificationApi(verificationData, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/verification/submit`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify(verificationData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to submit identity verification.');
+  }
+
+  return data.data;
+}
+
+export async function becomeOwnerApi(customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/verification/become-owner`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to initiate owner transition.');
+  }
+
+  return data.data;
+}
+
+// ==========================================
+// Booking Request & Mutual Digital Agreement API
+// ==========================================
+
+export async function createBookingRequestApi(requestData, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/request`, {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify(requestData),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error?.message || data.message || 'Failed to send booking request.');
+    err.code = data.error?.code;
+    throw err;
+  }
+
+  return data.data;
+}
+
+export async function respondBookingRequestApi(bookingId, action, rejectionReason, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/bookings/${bookingId}/respond`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ action, rejectionReason }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to respond to booking request.');
+  }
+
+  return data.data;
+}
+
+export async function fetchAgreementByIdApi(agreementId, customToken) {
+  const token = customToken || getAuthToken();
+  const res = await fetch(`${API_BASE_URL}/agreements/${agreementId}`, {
+    headers: getAuthHeaders(token),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch agreement details.');
   }
 
   return data.data;
